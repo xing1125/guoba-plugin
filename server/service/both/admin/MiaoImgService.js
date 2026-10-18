@@ -81,7 +81,9 @@ export class MiaoImgService extends Service {
     if (create && !fs.existsSync(dir)) {
       fs.mkdirSync(dir, {recursive: true})
     }
-    return {k, dir, charDirRel: rel}
+    // 相对 miaoRes 的 posix 路径（供前端 /img?rel= 预览用）
+    const resRel = path.relative(this.miaoRes, dir).replace(/\\/g, '/')
+    return {k, dir, charDirRel: rel, resRel}
   }
 
   /** 扫描目录内图片（不含子目录） */
@@ -159,22 +161,22 @@ export class MiaoImgService extends Service {
     return {kind, label: k.label, list: out}
   }
 
-  /** 某角色图片列表（相对路径供前端预览/删除用） */
+  /** 某角色图片列表（rel 为相对 miaoRes 的路径，供前端预览/删除用） */
   list(kind, name) {
-    const {k, dir, charDirRel} = this._charDir(kind, name)
+    const {k, dir, charDirRel, resRel} = this._charDir(kind, name)
     if (!fs.existsSync(dir)) {
       return {kind, label: k.label, name, list: []}
     }
     const list = this._imgsIn(dir).map((it) => ({
       ...it,
-      rel: `${charDirRel.replace(/\\/g, '/')}/${it.name}`,
+      rel: `${resRel}/${it.name}`,
     }))
     return {kind, label: k.label, name, list}
   }
 
   /** 保存上传的图片（md5 命名去重） */
   async save(kind, name, buffer, originalname = '', ctx = {}) {
-    const {k, dir, charDirRel} = this._charDir(kind, name, true)
+    const {k, dir, charDirRel, resRel} = this._charDir(kind, name, true)
     if (!Buffer.isBuffer(buffer) || !buffer.length) {
       throw new Error('图片内容为空')
     }
@@ -202,7 +204,7 @@ export class MiaoImgService extends Service {
       kind,
       name,
       file: fileName,
-      rel: `${charDirRel.replace(/\\/g, '/')}/${fileName}`,
+      rel: `${resRel}/${fileName}`,
       existed,
       bytes: buffer.length,
     }

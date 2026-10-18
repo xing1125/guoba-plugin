@@ -57,6 +57,7 @@ export const MENU_CATALOGUE = [
   {perm: 'uid', name: '游戏 UID'},
   {perm: 'sys-users', name: '后台用户'},
   {perm: 'audit', name: '审计日志'},
+  {perm: 'logs', name: '运行日志'},
   {perm: 'about', name: '关于'},
 ]
 
@@ -64,6 +65,7 @@ export const MENU_CATALOGUE = [
 const SCOPE_RULES = [
   {re: /^\/api\/admin\/auth\//, scope: 'sys'},
   {re: /^\/api\/admin\/audit/, scope: 'audit'},
+  {re: /^\/api\/admin\/logs/, scope: 'log'},
   {re: /^\/api\/admin\/accounts/, scope: 'account'},
   {re: /^\/api\/admin\/uids/, scope: 'account'},
   {re: /^\/api\/admin\/groups/, scope: 'group'},
@@ -89,6 +91,7 @@ const OP_OVERRIDES = [
   {re: /^\/api\/admin\/accounts\/(delete|delete-expired|restore)/, op: 'account:delete'},
   {re: /^\/api\/admin\/groups\/(batch-clear|quit)/, op: 'group:delete'},
   {re: /^\/api\/admin\/data\/(key\/delete|keys\/delete-prefix)/, op: 'data:delete'},
+  {re: /^\/api\/admin\/logs\/clear/, op: 'log:delete'},
 ]
 
 const CACHE_TTL = 10 * 1000

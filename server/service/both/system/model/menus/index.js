@@ -12,6 +12,8 @@ export async function useMenuList() {
   menus.push(SystemMenus.dashboard)
   menus.push(SystemMenus.screen)
   menus.push(SystemMenus.sysinfo)
+  menus.push(SystemMenus.files)
+  menus.push(SystemMenus.miaoImg)
   menus.push(SystemMenus.groups)
   menus.push(SystemMenus.usersData)
   menus.push(SystemMenus.yingai)
@@ -24,6 +26,7 @@ export async function useMenuList() {
   menus.push(SystemMenus.uid)
   menus.push(SystemMenus.sysUsers)
   menus.push(SystemMenus.audit)
+  menus.push(SystemMenus.logs)
   menus.push(SystemMenus.about)
   return menus
 }

@@ -35,6 +35,7 @@ const BLACKLIST_DIR = new Set(['node_modules', '.git', '.svn', '.hg', '.pnpm'])
 const MAX_READ_BYTES = 2 * 1024 * 1024
 const MAX_WRITE_BYTES = 1024 * 1024
 const MAX_DEPTH = 12
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 
 export class WorkspaceService extends Service {
 
@@ -156,9 +157,7 @@ export class WorkspaceService extends Service {
       }
       const ext = path.extname(e.name).toLowerCase()
       const editableName = EDIT_EXT.has(ext) || (e.name.startsWith('.') && !ext && EDIT_NAME.has(e.name.toLowerCase()))
-      if (!editableName) {
-        continue
-      }
+      // 非白名单类型也列出（表格可见 / 可下载），只标记为不可编辑
       let st = null
       try {
         st = fs.statSync(full)
@@ -171,7 +170,7 @@ export class WorkspaceService extends Service {
         size,
         mtime: st ? new Date(st.mtimeMs).toISOString() : null,
         ext,
-        editable: this._editable(e.name, size),
+        editable: editableName ? this._editable(e.name, size) : false,
       })
     }
     items.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, 'zh-Hans-CN') : a.dir ? -1 : 1))
@@ -408,5 +407,94 @@ export class WorkspaceService extends Service {
       detail: {backup: backupName},
     })
     return {root: rootKey, path: rel, restored: true}
+  }
+
+  /* ----------------------------- 下载 ----------------------------- */
+
+  /** 下载文件（不限文本类型，但有大小上限；返回 {target,name,ext,size} 供 controller 直发） */
+  download(rootKey, relPath) {
+    const {target} = this._safePath(rootKey, relPath)
+    let st
+    try {
+      st = fs.statSync(target)
+    } catch {
+      throw new Error('文件不存在')
+    }
+    if (st.isDirectory()) {
+      throw new Error('这是一个目录，不支持下载')
+    }
+    if (st.size > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`文件超过 ${MAX_DOWNLOAD_BYTES / 1024 / 1024}MB，不支持下载`)
+    }
+    return {target, name: path.basename(target), ext: path.extname(target).toLowerCase(), size: st.size}
+  }
+
+  /* ----------------------------- 回收站 ----------------------------- */
+
+  /** 回收站条目列表 */
+  trashList() {
+    fs.mkdirSync(this.trashDir, {recursive: true})
+    const out = []
+    for (const name of fs.readdirSync(this.trashDir)) {
+      let st = null
+      try {
+        st = fs.statSync(path.join(this.trashDir, name))
+      } catch {}
+      const m = /^(\d{13,})_/.exec(name)
+      const ts = m ? Number(m[1]) : null
+      out.push({
+        name,
+        dir: st ? st.isDirectory() : false,
+        size: st && !st.isDirectory() ? st.size : 0,
+        time: Number.isFinite(ts) ? new Date(ts).toISOString() : st ? new Date(st.mtimeMs).toISOString() : null,
+      })
+    }
+    return out.sort((a, b) => String(b.name).localeCompare(String(a.name)))
+  }
+
+  /** 校验回收站条目名（只允许 <时间戳>_xxx 形式，防路径注入） */
+  _checkTrashName(name) {
+    const n = path.basename(String(name || ''))
+    if (!n || /[\\/:*?"<>|]/.test(n) || !/^\d{13,}_/.test(n)) {
+      throw new Error('回收站条目名不合法')
+    }
+    return n
+  }
+
+  /** 彻底删除单个回收站条目 */
+  trashRemove(name, ctx = {}) {
+    const n = this._checkTrashName(name)
+    const target = path.join(this.trashDir, n)
+    if (!fs.existsSync(target)) {
+      throw new Error('条目不存在（可能已删除）')
+    }
+    fs.rmSync(target, {recursive: true, force: true})
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'workspace.trashRemove',
+      target: `guoba-trash/${n}`,
+      detail: {},
+    })
+    return {removed: n}
+  }
+
+  /** 清空回收站 */
+  trashClear(ctx = {}) {
+    fs.mkdirSync(this.trashDir, {recursive: true})
+    let count = 0
+    for (const name of fs.readdirSync(this.trashDir)) {
+      try {
+        if (!/^\d{13,}_/.test(name)) continue
+        fs.rmSync(path.join(this.trashDir, name), {recursive: true, force: true})
+        count++
+      } catch {}
+    }
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'workspace.trashClear',
+      target: 'guoba-trash',
+      detail: {count},
+    })
+    return {cleared: count}
   }
 }

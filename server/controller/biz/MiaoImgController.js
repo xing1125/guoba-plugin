@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import multer from 'multer'
 import {autowired, Result} from '#guoba.framework'
 import {ApiController} from '#guoba.platform'
@@ -11,6 +12,9 @@ import {ApiController} from '#guoba.platform'
  *   POST /upload   (multipart: kind,name,files[])  上传（md5 命名，与喵喵约定一致）
  *   POST /delete   {kind,name,file,confirm}        删除（移入回收站）
  *   GET  /img?rel=                                 图片二进制预览（rel 限定在图片目录内）
+ *
+ * ⚠️ 框架 loadHelper 已在所有 POST 上全局注册 multer（upload.any()，磁盘存储），
+ *    请求体到达这里时已被解析：直接用 req.files / req.body，勿再重复解析。
  */
 export default class MiaoImgController extends ApiController {
 
@@ -19,10 +23,11 @@ export default class MiaoImgController extends ApiController {
   constructor(guobaApp) {
     super('/admin/miao-img', guobaApp)
     this._hits = new Map()
+    // 兜底：极少数情况下全局 multer 未接管时自行解析（内存存储）
     this._upload = multer({
       storage: multer.memoryStorage(),
       limits: {fileSize: 10 * 1024 * 1024, files: 10},
-    }).array('files', 10)
+    }).any()
   }
 
   registerRouters() {
@@ -93,18 +98,28 @@ export default class MiaoImgController extends ApiController {
       return Result.error('上传过于频繁，请稍后再试')
     }
     try {
-      await this._runUpload(req, res)
-      const kind = String(req.body?.kind || '')
-      const name = String(req.body?.name || '')
-      const files = req.files || []
+      let files = Array.isArray(req.files) ? req.files : null
+      if (!files) {
+        // 全局 multer 未接管时兜底自行解析
+        await this._runUpload(req, res)
+        files = req.files || []
+      }
+      files = files.filter((f) => f.fieldname === 'files')
       if (!files.length) {
         return Result.error('未收到图片文件（字段名 files）')
       }
+      const kind = String(req.body?.kind || '')
+      const name = String(req.body?.name || '')
       const saved = []
       const failed = []
       for (const f of files) {
         try {
-          saved.push(await this.miaoImgService.save(kind, name, f.buffer, f.originalname, this._ctx(req)))
+          // 磁盘存储（全局 multer）：从 f.path 读；内存存储（兜底）：直接 f.buffer
+          const buffer = Buffer.isBuffer(f.buffer) ? f.buffer : fs.readFileSync(f.path)
+          try {
+            if (f.path && !Buffer.isBuffer(f.buffer)) fs.unlinkSync(f.path)
+          } catch {}
+          saved.push(await this.miaoImgService.save(kind, name, buffer, f.originalname, this._ctx(req)))
         } catch (e) {
           failed.push({file: f.originalname, reason: e.message})
         }

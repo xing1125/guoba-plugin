@@ -188,6 +188,17 @@ export const SystemMenus = {
     },
   },
   // 关于
+  // 运行日志（云崽管理后台扩展）
+  logs: {
+    path: '/logs',
+    name: 'RunLogs',
+    component: '/guoba/system/logs/index',
+    meta: {
+      perm: 'logs',
+      title: '运行日志',
+      icon: 'ant-design:file-text-outlined',
+    },
+  },
   about: {
     path: '/about',
     name: 'about',

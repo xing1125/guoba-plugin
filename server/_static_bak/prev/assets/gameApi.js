@@ -1,0 +1,1 @@
+import{x as defHttp}from"./index.js";const gameApi={overview:(force=!1)=>defHttp.get({url:"/admin/games/overview",params:force?{force:"true"}:{}}),accounts:(game,q="")=>defHttp.get({url:`/admin/games/${encodeURIComponent(game)}/accounts`,params:q?{q:q}:{}}),stokenReport:(game="")=>defHttp.get({url:"/admin/games/stoken/report",params:game?{game:game}:{}})};export{gameApi as g};

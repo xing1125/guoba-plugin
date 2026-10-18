@@ -24,8 +24,8 @@ const BUILTIN_ROLES = [
     role: 'admin',
     name: '管理员',
     menus: [
-      'home', 'dashboard', 'screen', 'groups', 'users-data', 'yingai', 'plugins-data', 'sign',
-      'data', 'config', 'account', 'uid', 'audit', 'about',
+      'home', 'dashboard', 'screen', 'sysinfo', 'files', 'miao-img', 'groups', 'users-data',
+      'yingai', 'plugins-data', 'sign', 'data', 'config', 'account', 'uid', 'audit', 'logs', 'about',
     ],
     ops: [
       'account:write',
