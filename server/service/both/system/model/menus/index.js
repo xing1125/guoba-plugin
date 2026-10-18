@@ -20,6 +20,8 @@ export async function useMenuList() {
   menus.push(...(await usePluginsMenu()))
   menus.push(SystemMenus.account)
   menus.push(SystemMenus.uid)
+  menus.push(SystemMenus.sysUsers)
+  menus.push(SystemMenus.audit)
   menus.push(SystemMenus.about)
   return menus
 }

@@ -23,11 +23,20 @@ const exclude = [
 
 /**
  * Token校验拦截器
+ *
+ * RBAC 升级后分两步：
+ *   1. 校验 token → 注入 req.user（username / uid / role）
+ *   2. 权限判定 → 路由映射操作码，角色不具备则 403
+ *
+ * 兼容：升级前签发的旧 token 只有 username，这里回查 admin_user 补齐 uid/role。
+ *
  * @param app
  */
 export default class TokenInterceptor extends Interceptor {
 
   systemService = autowired('systemService')
+  authService = autowired('authService')
+  permService = autowired('permService')
 
   constructor(app) {
     super(app)
@@ -56,7 +65,19 @@ export default class TokenInterceptor extends Interceptor {
           let redisToken = await redis.get(redisKey)
           if (redisToken) {
             try {
-              jwt.verify(redisToken, cfg.getJwtSecret())
+              const payload = jwt.verify(redisToken, cfg.getJwtSecret())
+              const user = this._resolveUser(payload)
+              // 注入当前登录用户（RBAC：uid/role/perms 供 Controller 做权限判断与审计）
+              req.user = user
+              const path = this.relativePath(req)
+              const guard = this._guard(user, req.method, path)
+              if (!guard.ok) {
+                const result = Result.noAuth()
+                result.message = guard.reason || '没有权限'
+                res.status(result.httpStatus).json(result.toJSON())
+                return
+              }
+              req.permOp = guard.op
               next()
               return
             } catch {
@@ -70,17 +91,67 @@ export default class TokenInterceptor extends Interceptor {
   }
 
   /**
-   * 检查是否reg是否通过校验，兼容自定义前缀
-   * @param {RegExp} reg
-   * @param {Request} req
+   * 还原登录用户：旧 token 只有 username，回查数据库补齐 uid/role，
+   * 保证升级前的登录态不会因缺角色而被判定为无权限。
    */
-  check(reg, req) {
+  _resolveUser(payload) {
+    if (!payload) return {username: 'admin', role: 'super'}
+    if (typeof payload === 'string') {
+      const row = this._lookup(payload)
+      return {username: payload, uid: row?.id ?? null, role: row?.role ?? 'super'}
+    }
+    const user = {...payload}
+    if (user.role == null || user.uid == null) {
+      const row = this._lookup(user.username)
+      if (row) {
+        user.uid = row.id
+        user.role = row.role
+      } else {
+        // 无对应后台账号（历史 token / 验证码通道）：按内置超管处理
+        user.role = user.role ?? 'super'
+      }
+    }
+    return user
+  }
+
+  _lookup(username) {
+    if (!username) return null
+    try {
+      return this.authService?.db?.getUserByUsername?.(username) || null
+    } catch {
+      return null
+    }
+  }
+
+  /** 权限判定：失败不影响主流程（服务异常时降级放行，靠 Controller 自行兜底） */
+  _guard(user, method, path) {
+    try {
+      const permService = this.permService
+      if (!permService?.guard) return {ok: true, op: 'read'}
+      return permService.guard(user, method, path)
+    } catch (e) {
+      logger?.warn?.(`[Guoba] 权限判定异常，已降级放行：${e.message}`)
+      return {ok: true, op: 'read'}
+    }
+  }
+
+  /** 去掉自定义挂载前缀后的路径 */
+  relativePath(req) {
     const {realMountPrefix} = _paths.server
     let {path} = req
     if (path.startsWith(realMountPrefix)) {
       path = path.substring(realMountPrefix.length)
     }
-    return reg.test(path)
+    return path
+  }
+
+  /**
+   * 检查是否reg是否通过校验，兼容自定义前缀
+   * @param {RegExp} reg
+   * @param {Request} req
+   */
+  check(reg, req) {
+    return reg.test(this.relativePath(req))
   }
 
   static priority = 100

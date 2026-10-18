@@ -21,13 +21,18 @@ export class LoginController extends ApiController {
   }
 
   async login(req) {
-    // let {username, password} = req.body
-    // if (username === 'admin' && password === 'admin') {
-    //   let token = this.loginService.signToken(username)
-    //   return Result.ok({token})
-    // }
-    // return Result.error('用户名或密码错误')
-    return Result.error('请使用“#锅巴登录”')
+    const {username, password} = req.body || {}
+    if (!username || !password) {
+      return Result.error('请输入用户名和密码')
+    }
+    const ip = (req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().split(',')[0].trim()
+    const ua = req.headers?.['user-agent'] || ''
+    const res = await this.loginService.passwordLogin({username, password, ip, ua})
+    if (res.ok) {
+      logger.mark(`[Guoba] 账号 ${username} 登录成功`)
+      return Result.ok({token: res.token, user: res.user})
+    }
+    return Result.error(res.reason || '用户名或密码错误')
   }
 
   async logout(req) {

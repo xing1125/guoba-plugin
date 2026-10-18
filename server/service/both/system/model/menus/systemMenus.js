@@ -6,6 +6,7 @@ export const SystemMenus = {
     name: 'Home',
     component: '/guoba/home/index',
     meta: {
+      perm: 'home',
       title: '首页',
       icon: 'bx:bx-home',
     },
@@ -16,6 +17,7 @@ export const SystemMenus = {
     name: 'Account',
     component: '/guoba/system/account/index',
     meta: {
+      perm: 'account',
       title: '账号管理',
       icon: 'ant-design:user-outlined',
     },
@@ -26,6 +28,7 @@ export const SystemMenus = {
     name: 'Uid',
     component: '/guoba/system/uids/index',
     meta: {
+      perm: 'uid',
       title: '游戏 UID',
       icon: 'mdi:gamepad-variant-outline',
     },
@@ -36,6 +39,7 @@ export const SystemMenus = {
     name: 'DataManage',
     component: '/guoba/system/data/index',
     meta: {
+      perm: 'data',
       title: '数据管理',
       icon: 'mdi:database-cog-outline',
     },
@@ -46,6 +50,7 @@ export const SystemMenus = {
     name: 'Sign',
     component: '/guoba/system/sign/index',
     meta: {
+      perm: 'sign',
       title: '游戏签到',
       icon: 'mdi:calendar-check-outline',
     },
@@ -56,6 +61,7 @@ export const SystemMenus = {
     name: 'Dashboard',
     component: '/guoba/system/dashboard/index',
     meta: {
+      perm: 'dashboard',
       title: '数据总览',
       icon: 'ant-design:dashboard-outlined',
     },
@@ -66,6 +72,7 @@ export const SystemMenus = {
     name: 'BotScreen',
     component: '/guoba/system/screen/index',
     meta: {
+      perm: 'screen',
       title: '状态大屏',
       icon: 'ant-design:fund-projection-screen-outlined',
     },
@@ -76,6 +83,7 @@ export const SystemMenus = {
     name: 'Groups',
     component: '/guoba/system/groups/index',
     meta: {
+      perm: 'groups',
       title: '群数据',
       icon: 'mdi:account-group-outline',
     },
@@ -86,7 +94,19 @@ export const SystemMenus = {
     name: 'UsersData',
     component: '/guoba/system/users/index',
     meta: {
+      perm: 'users-data',
       title: '用户数据',
+      icon: 'mdi:account-multiple-outline',
+    },
+  },
+  // AI 私聊（YingAIPrivate · 云崽管理后台扩展）
+  yingai: {
+    path: '/yingai',
+    name: 'YingAi',
+    component: '/guoba/system/yingai/index',
+    meta: {
+      perm: 'yingai',
+      title: 'AI 私聊',
       icon: 'mdi:account-multiple-outline',
     },
   },
@@ -96,6 +116,7 @@ export const SystemMenus = {
     name: 'PluginsData',
     component: '/guoba/system/plugins/index',
     meta: {
+      perm: 'plugins-data',
       title: '插件数据',
       icon: 'mdi:puzzle-outline',
     },
@@ -106,8 +127,31 @@ export const SystemMenus = {
     name: 'Config',
     component: '/guoba/config/index',
     meta: {
+      perm: 'config',
       title: '配置管理',
       icon: 'ion:settings-outline',
+    },
+  },
+  // 后台用户与角色（RBAC）
+  sysUsers: {
+    path: '/sys-users',
+    name: 'SysUsers',
+    component: '/guoba/system/sys-users/index',
+    meta: {
+      perm: 'sys-users',
+      title: '后台用户',
+      icon: 'ant-design:team-outlined',
+    },
+  },
+  // 审计日志
+  audit: {
+    path: '/audit',
+    name: 'AuditLog',
+    component: '/guoba/system/audit/index',
+    meta: {
+      perm: 'audit',
+      title: '审计日志',
+      icon: 'ant-design:audit-outlined',
     },
   },
   // 关于
@@ -116,6 +160,7 @@ export const SystemMenus = {
     name: 'about',
     component: '/guoba/about/index',
     meta: {
+      perm: 'about',
       title: '关于',
       icon: 'ant-design:info-circle-outlined',
     },

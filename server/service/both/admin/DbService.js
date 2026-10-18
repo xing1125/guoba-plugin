@@ -4,6 +4,16 @@ import Database from 'better-sqlite3'
 import {Service} from '#guoba.framework'
 import {_paths} from '#guoba.platform'
 
+/** 容错 JSON 解析（用于角色 menus/ops 等 TEXT 列） */
+function safeJson(str, fallback = null) {
+  if (str == null) return fallback
+  try {
+    return JSON.parse(str)
+  } catch {
+    return fallback
+  }
+}
+
 /**
  * 双库连接管理
  *
@@ -156,6 +166,41 @@ export class DbService extends Service {
         source     TEXT,
         updated_at TEXT
       );
+
+      /* ---- RBAC：后台管理员账号 ---- */
+      CREATE TABLE IF NOT EXISTS admin_user (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        nickname      TEXT,
+        role          TEXT NOT NULL DEFAULT 'viewer',
+        status        TEXT NOT NULL DEFAULT 'active',
+        must_change   INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT,
+        last_login_at TEXT
+      );
+
+      /* ---- RBAC：角色定义（builtin=1 为内置，不可删） ---- */
+      CREATE TABLE IF NOT EXISTS admin_role (
+        role        TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        menus       TEXT NOT NULL DEFAULT '[]',
+        ops         TEXT NOT NULL DEFAULT '[]',
+        builtin     INTEGER NOT NULL DEFAULT 0,
+        description TEXT
+      );
+
+      /* ---- 登录日志 ---- */
+      CREATE TABLE IF NOT EXISTS login_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT,
+        ip         TEXT,
+        ua         TEXT,
+        success    INTEGER NOT NULL DEFAULT 0,
+        reason     TEXT,
+        created_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_login_created ON login_log(created_at);
     `)
   }
 
@@ -178,7 +223,7 @@ export class DbService extends Service {
     return this.getAdminDb().prepare('SELECT * FROM sync_meta WHERE task = ?').get(task) || null
   }
 
-  /** 写操作审计 */
+  /** 写操作审计（统一入口；audit 为语义别名） */
   writeAudit({actor = '', action = '', target = '', detail = '', ip = ''} = {}) {
     try {
       this.getAdminDb()
@@ -189,11 +234,55 @@ export class DbService extends Service {
     }
   }
 
-  /** 最近审计记录 */
+  /** 语义别名：audit({actor, action, target, detail, ip}) */
+  audit(entry = {}) {
+    this.writeAudit(entry)
+  }
+
+  /** 最近审计记录（兼容旧调用：只传 limit 时返回数组） */
   queryAudit({limit = 50} = {}) {
     return this.getAdminDb()
       .prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?')
       .all(Math.min(200, Math.max(1, Number(limit) || 50)))
+  }
+
+  /**
+   * 审计日志分页查询（筛选：actor / action / 时间区间 / 关键词）
+   * @returns {{list: object[], total: number}}
+   */
+  queryAuditPaged({page = 1, size = 20, actor = '', action = '', from = '', to = '', keyword = ''} = {}) {
+    const db = this.getAdminDb()
+    const where = []
+    const args = []
+    if (actor) { where.push('actor LIKE ?'); args.push(`%${actor}%`) }
+    if (action) { where.push('action LIKE ?'); args.push(`%${action}%`) }
+    if (from) { where.push('created_at >= ?'); args.push(String(from)) }
+    if (to) { where.push('created_at <= ?'); args.push(String(to)) }
+    if (keyword) {
+      where.push('(target LIKE ? OR detail LIKE ?)')
+      args.push(`%${keyword}%`, `%${keyword}%`)
+    }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const sizeN = Math.min(200, Math.max(1, Number(size) || 20))
+    const pageN = Math.max(1, Number(page) || 1)
+    const total = db.prepare(`SELECT count(*) AS c FROM audit_log ${clause}`).get(...args).c
+    const list = db
+      .prepare(`SELECT * FROM audit_log ${clause} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .all(...args, sizeN, (pageN - 1) * sizeN)
+    return {list, total}
+  }
+
+  /** 审计概览：总数、今日数、按 action 前缀分布、高危操作数 */
+  auditStats() {
+    const db = this.getAdminDb()
+    const today = new Date().toISOString().slice(0, 10)
+    const total = db.prepare('SELECT count(*) AS c FROM audit_log').get().c
+    const todayCount = db.prepare("SELECT count(*) AS c FROM audit_log WHERE created_at >= ?").get(today).c
+    const risky = db.prepare("SELECT count(*) AS c FROM audit_log WHERE action LIKE '%delete%' OR action LIKE '%clear%' OR action LIKE '%quit%'").get().c
+    const byAction = db
+      .prepare("SELECT action, count(*) AS c FROM audit_log GROUP BY action ORDER BY c DESC LIMIT 12")
+      .all()
+    return {total, today: todayCount, risky, byAction}
   }
 
   /** 备份被删除的账号（整行 + 关联记录） */
@@ -220,6 +309,132 @@ export class DbService extends Service {
       row.payload = JSON.parse(row.payload)
     } catch {}
     return row
+  }
+
+  /* ----------------------------- RBAC 用户 ----------------------------- */
+
+  /** 按用户名取后台账号（含密码哈希），不存在返回 null */
+  getUserByUsername(username) {
+    return this.getAdminDb().prepare('SELECT * FROM admin_user WHERE username = ?').get(username) || null
+  }
+
+  /** 按 id 取后台账号 */
+  getUserById(id) {
+    return this.getAdminDb().prepare('SELECT * FROM admin_user WHERE id = ?').get(Number(id)) || null
+  }
+
+  /** 列出后台账号（脱敏：不含 password_hash） */
+  listUsers({keyword = '', limit = 200} = {}) {
+    const db = this.getAdminDb()
+    const kw = String(keyword || '').trim()
+    const rows = kw
+      ? db.prepare('SELECT id, username, nickname, role, status, must_change, created_at, last_login_at FROM admin_user WHERE username LIKE ? OR nickname LIKE ? ORDER BY id LIMIT ?').all(`%${kw}%`, `%${kw}%`, Math.min(500, Number(limit) || 200))
+      : db.prepare('SELECT id, username, nickname, role, status, must_change, created_at, last_login_at FROM admin_user ORDER BY id LIMIT ?').all(Math.min(500, Number(limit) || 200))
+    return rows.map((r) => ({...r, must_change: !!r.must_change}))
+  }
+
+  /** 新建 / 更新后台账号（password_hash 由调用方用 scrypt 生成后传入） */
+  upsertUser({id, username, password_hash, nickname = '', role = 'viewer', status = 'active', must_change = 0} = {}) {
+    const db = this.getAdminDb()
+    if (id) {
+      db.prepare('UPDATE admin_user SET password_hash = ?, nickname = ?, role = ?, status = ?, must_change = ? WHERE id = ?')
+        .run(password_hash, nickname, role, status, must_change ? 1 : 0, Number(id))
+      return this.getUserById(id)
+    }
+    const info = db.prepare('INSERT INTO admin_user (username, password_hash, nickname, role, status, must_change, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(username, password_hash, nickname, role, status, must_change ? 1 : 0, new Date().toISOString())
+    return this.getUserById(info.lastInsertRowid)
+  }
+
+  /** 更新最后登录时间 / 改密状态 */
+  updateUserMeta(id, {last_login_at, must_change} = {}) {
+    const sets = []
+    const vals = []
+    if (last_login_at != null) { sets.push('last_login_at = ?'); vals.push(last_login_at) }
+    if (must_change != null) { sets.push('must_change = ?'); vals.push(must_change ? 1 : 0) }
+    if (!sets.length) return
+    vals.push(Number(id))
+    this.getAdminDb().prepare(`UPDATE admin_user SET ${sets.join(', ')} WHERE id = ?`).run(...vals)
+  }
+
+  /** 删除后台账号 */
+  deleteUser(id) {
+    this.getAdminDb().prepare('DELETE FROM admin_user WHERE id = ?').run(Number(id))
+  }
+
+  /* ----------------------------- RBAC 角色 ----------------------------- */
+
+  /** 取角色定义（含解析后的 menus/ops 数组） */
+  getRole(role) {
+    const row = this.getAdminDb().prepare('SELECT * FROM admin_role WHERE role = ?').get(role)
+    if (!row) return null
+    return this._decodeRole(row)
+  }
+
+  listRoles() {
+    return this.getAdminDb().prepare('SELECT * FROM admin_role ORDER BY role').all().map((r) => this._decodeRole(r))
+  }
+
+  upsertRole({role, name, menus = [], ops = [], builtin = 0, description = ''} = {}) {
+    const db = this.getAdminDb()
+    const exist = db.prepare('SELECT role FROM admin_role WHERE role = ?').get(role)
+    if (exist) {
+      db.prepare('UPDATE admin_role SET name = ?, menus = ?, ops = ?, builtin = ?, description = ? WHERE role = ?')
+        .run(name, JSON.stringify(menus), JSON.stringify(ops), builtin ? 1 : 0, description, role)
+    } else {
+      db.prepare('INSERT INTO admin_role (role, name, menus, ops, builtin, description) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(role, name, JSON.stringify(menus), JSON.stringify(ops), builtin ? 1 : 0, description)
+    }
+    return this.getRole(role)
+  }
+
+  deleteRole(role) {
+    this.getAdminDb().prepare('DELETE FROM admin_role WHERE role = ? AND builtin = 0').run(role)
+  }
+
+  _decodeRole(row) {
+    return {
+      ...row,
+      menus: safeJson(row.menus, []),
+      ops: safeJson(row.ops, []),
+      builtin: !!row.builtin,
+    }
+  }
+
+  /* ----------------------------- 登录日志 ----------------------------- */
+
+  writeLoginLog({username = '', ip = '', ua = '', success = false, reason = ''} = {}) {
+    try {
+      this.getAdminDb()
+        .prepare('INSERT INTO login_log (username, ip, ua, success, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(username, ip, String(ua || '').slice(0, 300), success ? 1 : 0, reason, new Date().toISOString())
+    } catch (e) {
+      logger?.warn?.(`[admin] 写登录日志失败：${e.message}`)
+    }
+  }
+
+  queryLoginLog({limit = 50} = {}) {
+    return this.getAdminDb()
+      .prepare('SELECT * FROM login_log ORDER BY id DESC LIMIT ?')
+      .all(Math.min(500, Math.max(1, Number(limit) || 50)))
+  }
+
+  /** 登录日志分页（可按用户名/结果筛选） */
+  queryLoginLogPaged({page = 1, size = 20, username = '', success = null} = {}) {
+    const db = this.getAdminDb()
+    const where = []
+    const args = []
+    if (username) { where.push('username LIKE ?'); args.push(`%${username}%`) }
+    if (success === true || success === 'true') { where.push('success = 1') }
+    if (success === false || success === 'false') { where.push('success = 0') }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const sizeN = Math.min(200, Math.max(1, Number(size) || 20))
+    const pageN = Math.max(1, Number(page) || 1)
+    const total = db.prepare(`SELECT count(*) AS c FROM login_log ${clause}`).get(...args).c
+    const list = db
+      .prepare(`SELECT * FROM login_log ${clause} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .all(...args, sizeN, (pageN - 1) * sizeN)
+    return {list, total}
   }
 
   close() {

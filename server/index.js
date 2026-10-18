@@ -1,5 +1,5 @@
 import path from "path";
-import {GuobaApplication} from "#guoba.framework";
+import {GuobaApplication, instancesMap} from "#guoba.framework";
 import {_paths, cfg, GuobaSupportMap, PluginsMap} from '#guoba.platform';
 import {isTRSS, isV3, isV4} from '#guoba.adapter'
 import {getWebAddress} from '#guoba.utils'
@@ -46,6 +46,7 @@ export async function createServer({isInit}) {
     prefix: _paths.server.realMountPrefix,
     staticPath: _paths.staticPath,
     created: appCreated,
+    mounted: appMounted,
     componentPaths: [
       path.join(_paths.pluginRoot, 'server/interceptor'),
       path.join(_paths.pluginRoot, 'server/service', 'both'),
@@ -115,4 +116,14 @@ function appCreated(guobaApp) {
     }
     next()
   })
+}
+
+function appMounted(guobaApp) {
+  // 组件加载完成后初始化 RBAC：确保内置角色与默认超管存在（幂等）
+  try {
+    instancesMap?.get('authService')?.ensureSuperAdmin?.()
+    instancesMap?.get('permService')?.invalidate?.()
+  } catch (e) {
+    logger?.warn?.(`[Guoba] RBAC 种子初始化失败：${e.message}`)
+  }
 }

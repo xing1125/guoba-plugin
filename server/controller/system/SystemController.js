@@ -8,9 +8,25 @@ import {sleep} from '#guoba.utils'
 export class SystemController extends ApiController {
 
   systemService = autowired('systemService')
+  dbService = autowired('dbService')
 
   constructor(guobaApp) {
     super('/sys', guobaApp)
+  }
+
+  /** 写审计 */
+  _audit(req, action, target, detail) {
+    try {
+      this.dbService?.writeAudit?.({
+        actor: String(req.user?.username || ''),
+        action,
+        target: String(target ?? ''),
+        detail: detail ?? '',
+        ip: String(req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim(),
+      })
+    } catch {
+      /* 审计失败不阻断主流程 */
+    }
   }
 
   registerRouters() {
@@ -21,7 +37,8 @@ export class SystemController extends ApiController {
     this.get('/fs/tree/children', this.getFsTreeChildren)
   }
 
-  async doRestartGuoba() {
+  async doRestartGuoba(req) {
+    this._audit(req, 'system.restart', 'guoba')
     if (Guoba && Guoba.reload) {
       await Promise.any([Guoba.reload(), sleep(500)])
       return Result.ok({}, '锅巴重启成功~')
@@ -33,6 +50,7 @@ export class SystemController extends ApiController {
   async putCreateDir(req) {
     let {path, name} = req.body
     let result = await this.systemService.createDir(path, name)
+    this._audit(req, 'system.mkdir', path + '/' + name)
     return Result.ok(result)
   }
 

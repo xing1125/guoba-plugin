@@ -4,6 +4,8 @@ import {ApiController, GuobaSupportMap, cfg} from '#guoba.platform'
 export default class PluginController extends ApiController {
 
   pluginService = autowired('pluginService')
+  dbService = autowired('dbService')
+  dbService = autowired('dbService')
 
   constructor(guobaApp) {
     super('/plugin', guobaApp)
@@ -29,6 +31,21 @@ export default class PluginController extends ApiController {
 
     // 执行操作
     this.post('/do/:pluginName/action', this.doAction)
+  }
+
+  /** 写审计 */
+  _audit(req, action, target, detail) {
+    try {
+      this.dbService?.writeAudit?.({
+        actor: String(req.user?.username || ''),
+        action,
+        target: String(target ?? ''),
+        detail: detail ?? '',
+        ip: String(req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim(),
+      })
+    } catch {
+      /* 审计失败不阻断主流程 */
+    }
   }
 
   /**
@@ -74,6 +91,7 @@ export default class PluginController extends ApiController {
       return Result.error(`不允许从 ${hostname} 安装插件，请在锅巴设置中添加白名单`)
     }
     let text = await this.pluginService.installPlugin(link, autoRestart, autoNpmInstall)
+    this._audit(req, 'plugin.install', link)
     return Result.ok(text)
   }
 
@@ -91,6 +109,7 @@ export default class PluginController extends ApiController {
       return Result.error('抱歉，由于miao-plugin是重要插件，不能卸载！')
     }
     let text = await this.pluginService.uninstallPluginBatch(nameArr)
+    this._audit(req, 'plugin.uninstall', nameArr.join(','))
     return Result.ok(text)
   }
 
@@ -135,6 +154,7 @@ export default class PluginController extends ApiController {
     if (typeof setConfigData !== 'function') {
       return Result.error('该插件没有配置setConfigData')
     }
+    this._audit(req, 'plugin.config', pluginName, {keys: Object.keys(req.body || {}).slice(0, 20)})
     let flag = await setConfigData(req.body, {Result})
     if (flag instanceof Result) {
       return flag
