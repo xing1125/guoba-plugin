@@ -185,6 +185,7 @@ export class StatsService extends Service {
 
   _groupList() {
     // 运行时优先读 Bot 内存群列表（有群名），拿不到就退回群号
+    // 注意：过滤字面 'null'/'undefined'（部分适配器会吐这种值），已退群的群不在此 Map 中
     const map = new Map()
     try {
       for (const b of this._iterBots()) {
@@ -192,7 +193,10 @@ export class StatsService extends Service {
         if (!gl || typeof gl.forEach !== 'function') continue
         gl.forEach((g, k) => {
           const gid = this._normGid(g?.group_id ?? g?.groupId ?? k)
-          if (gid) map.set(gid, g?.group_name ?? g?.groupName ?? '')
+          if (!gid) return
+          const raw = g?.group_name ?? g?.groupName
+          const nm = typeof raw === 'string' ? raw.trim() : ''
+          map.set(gid, nm && nm !== 'null' && nm !== 'undefined' ? nm : '')
         })
       }
     } catch {
@@ -426,6 +430,8 @@ export class StatsService extends Service {
         return {
           gid: r.gid,
           name: nameMap.get(r.gid) || '',
+          // nameMap 的 key 即运行时在群集合：false = Bot 已不在该群（无群名属正常）
+          inGroup: nameMap.has(r.gid),
           recv: r.recv,
           send: r.send,
           total: r.total,
