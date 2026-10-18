@@ -7,7 +7,7 @@ import {ApiController} from '#guoba.platform'
  * 喵喵面板图 / 角色图片管理接口（/api/admin/miao-img）
  *
  * 在后台替代聊天指令 `#上传xx面板图` / `#上传xx图片`：
- *   GET  /characters?kind=profile|character   有图的角色清单
+ *   GET  /characters?kind=profile|character|art   有图的角色清单
  *   GET  /list?kind=&name=                    某角色图片列表
  *   POST /upload   (multipart: kind,name,files[])  上传（md5 命名，与喵喵约定一致）
  *   POST /delete   {kind,name,file,confirm}        删除（移入回收站）

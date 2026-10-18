@@ -9,10 +9,11 @@ import {_paths} from '#guoba.platform'
  *
  * 与 miao-plugin 聊天指令 `#上传xx面板图` / `#上传xx图片` 落盘约定完全一致：
  *   - kind=profile   → miao-plugin/resources/profile/normal-character/<角色名>/   （面板图，png|jpg|jpeg|webp）
- *   - kind=character → miao-plugin/resources/character-img/<角色名>/upload/       （角色图片，多支持 gif）
+ *   - kind=character → miao-plugin/resources/character-img/<角色名>/upload/       （角色图片/写真，多支持 gif）
+ *   - kind=art       → miao-plugin/resources/character-img/<角色名>/              （卡面立绘库，png|webp，不含 upload//se/ 子层）
  * 文件名 = 内容 md5 去重，同名跳过；删除移入回收站；全部写操作写审计。
  *
- * 只允许在上述两类目录内活动（realpath 防逃逸）。
+ * 只允许在上述目录内活动（realpath 防逃逸）。
  */
 
 const IMG_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp'])
@@ -46,6 +47,13 @@ export class MiaoImgService extends Service {
         label: '角色图片',
         exts: new Set([...IMG_EXT, GIF_EXT]),
       },
+      // 卡面立绘库：与 kind=character 同根，但直接落在 <角色名>/ 根目录（不走 upload/ 子层），
+      // 对应 miao CharImg.getCardImg 的随机采样目录（miao-char-sync.mjs art 生成的 01..04.webp 就在这里）
+      art: {
+        base: path.join(this.miaoRes, 'character-img'),
+        label: '卡面立绘',
+        exts: new Set(['.png', '.webp']),
+      },
     }
     this.trashDir = path.resolve(_paths.pluginRoot, '..', '..', 'temp', 'guoba-trash')
   }
@@ -53,7 +61,7 @@ export class MiaoImgService extends Service {
   _kind(kind) {
     const k = this.kindsMap[String(kind || '')]
     if (!k) {
-      throw new Error('未知的图片类型，只允许 profile / character')
+      throw new Error('未知的图片类型，只允许 profile / character / art')
     }
     return k
   }
@@ -118,7 +126,7 @@ export class MiaoImgService extends Service {
   }
 
   /** 递归统计目录内图片数（character 类型图片在 <角色>/upload 子层） */
-  _countImgsDeep(dir, depth = 0) {
+  _countImgsDeep(dir, depth = 0, skipDirs = null) {
     if (depth > 3) {
       return 0
     }
@@ -132,7 +140,11 @@ export class MiaoImgService extends Service {
     for (const e of entries) {
       const full = path.join(dir, e.name)
       if (e.isDirectory()) {
-        n += this._countImgsDeep(full, depth + 1)
+        // art kind 只管根目录层，跳过 upload/（写真）与 se/（小清新）
+        if (skipDirs && skipDirs.has(e.name)) {
+          continue
+        }
+        n += this._countImgsDeep(full, depth + 1, skipDirs)
       } else if (MIME[path.extname(e.name).toLowerCase()]) {
         n += 1
       }
@@ -152,7 +164,9 @@ export class MiaoImgService extends Service {
         continue
       }
       const dir = path.join(k.base, e.name)
-      const count = this._countImgsDeep(dir)
+      // art 只统计根目录层图片（跳过 upload/、se/ 子目录），避免与 character kind 重复计数
+      const skip = kind === 'art' ? new Set(['upload', 'se']) : null
+      const count = this._countImgsDeep(dir, 0, skip)
       if (count > 0) {
         out.push({name: e.name, count})
       }
