@@ -17,7 +17,8 @@ export class YingAiService extends Service {
   overview() { return this._data.overview() }
   users(q) { return this._data.users(q) }
   messages(uid, q) { return this._data.messages(uid, q) }
-  insights() { return this._data.insights() }
+  compare() { return this._data.compare() }
+  insights(uid) { return this._data.insights(uid || '') }
   setEnabled(uid, enabled) { return this._data.setEnabled(uid, enabled) }
   invalidate() { this._data.invalidate() }
 }

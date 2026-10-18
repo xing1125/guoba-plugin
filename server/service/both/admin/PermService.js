@@ -43,6 +43,7 @@ export const MENU_CATALOGUE = [
   {perm: 'home', name: '首页'},
   {perm: 'dashboard', name: '数据总览'},
   {perm: 'screen', name: '状态大屏'},
+  {perm: 'sysinfo', name: '系统信息'},
   {perm: 'groups', name: '群数据'},
   {perm: 'users-data', name: '用户数据'},
   {perm: 'yingai', name: 'AI 私聊'},

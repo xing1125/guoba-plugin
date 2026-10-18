@@ -77,6 +77,17 @@ export const SystemMenus = {
       icon: 'ant-design:fund-projection-screen-outlined',
     },
   },
+  // 系统信息（云崽管理后台扩展）
+  sysinfo: {
+    path: '/sysinfo',
+    name: 'SysInfo',
+    component: '/guoba/system/sysinfo/index',
+    meta: {
+      perm: 'sysinfo',
+      title: '系统信息',
+      icon: 'ant-design:desktop-outlined',
+    },
+  },
   // 群数据（云崽管理后台扩展）
   groups: {
     path: '/groups',
