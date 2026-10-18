@@ -13,6 +13,7 @@ export async function useMenuList() {
   menus.push(SystemMenus.screen)
   menus.push(SystemMenus.groups)
   menus.push(SystemMenus.usersData)
+  menus.push(SystemMenus.yingai)
   menus.push(SystemMenus.pluginsData)
   menus.push(SystemMenus.sign)
   menus.push(SystemMenus.data)
