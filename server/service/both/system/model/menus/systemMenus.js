@@ -88,6 +88,28 @@ export const SystemMenus = {
       icon: 'ant-design:desktop-outlined',
     },
   },
+  // 文件管理（云崽管理后台扩展）
+  files: {
+    path: '/files',
+    name: 'WorkspaceFiles',
+    component: '/guoba/system/files/index',
+    meta: {
+      perm: 'files',
+      title: '文件管理',
+      icon: 'ant-design:folder-open-outlined',
+    },
+  },
+  // 喵喵面板图（云崽管理后台扩展）
+  miaoImg: {
+    path: '/miao-img',
+    name: 'MiaoImg',
+    component: '/guoba/system/miao-img/index',
+    meta: {
+      perm: 'miao-img',
+      title: '喵喵面板图',
+      icon: 'ant-design:picture-outlined',
+    },
+  },
   // 群数据（云崽管理后台扩展）
   groups: {
     path: '/groups',

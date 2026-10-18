@@ -44,6 +44,8 @@ export const MENU_CATALOGUE = [
   {perm: 'dashboard', name: '数据总览'},
   {perm: 'screen', name: '状态大屏'},
   {perm: 'sysinfo', name: '系统信息'},
+  {perm: 'files', name: '文件管理'},
+  {perm: 'miao-img', name: '喵喵面板图'},
   {perm: 'groups', name: '群数据'},
   {perm: 'users-data', name: '用户数据'},
   {perm: 'yingai', name: 'AI 私聊'},

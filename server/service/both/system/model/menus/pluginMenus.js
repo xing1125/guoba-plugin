@@ -65,6 +65,11 @@ export async function usePluginsMenu() {
   // 喵喵插件额外功能
   pluginMenus.push(...(await useMiaoPluginMenu()))
 
+  // 鸣潮签到看板（Cloudtide Waves-plugin）：iframe 同源集成插件的 dashboardServer 大屏。
+  // frameSrc=/waves-dashboard 由插件注册在 TRSS 共享的 Bot.express 上（与锅巴同端口、同源，
+  // 见 Cloudtide Waves-plugin/model/dashboardServer.js 的 mountSameOriginRoute）。
+  pluginMenus.push(...(await useWavesPluginMenu()))
+
   if (pluginMenus.length > 0) {
     return [
       pluginsStoreMenu,
@@ -111,8 +116,7 @@ const miaoV1Menu = {
 }
 
 // 喵喵帮助菜单
-async function useMiaoPluginMenu() {
-  // 判断是否安装了喵喵插件
+async function useMiaoPluginMenu() {  // 判断是否安装了喵喵插件
   if (PluginsMap.get('miao-plugin')) {
     // 判断喵喵插件版本
     try {
@@ -127,4 +131,23 @@ async function useMiaoPluginMenu() {
     }
   }
   return []
+}
+
+// 鸣潮签到看板菜单（Cloudtide Waves-plugin，key = 插件目录名小写）
+// component 留空 → 前端路由层按 meta.frameSrc 自动转 IFRAME，由布局的 frame 层渲染成整页 iframe
+async function useWavesPluginMenu() {
+  if (!PluginsMap.get('cloudtide waves-plugin')) {
+    return []
+  }
+  return [
+    {
+      path: '/plugin/extra/waves-dashboard',
+      name: 'WavesDashboard',
+      meta: {
+        title: '鸣潮签到看板',
+        icon: 'ion:stats-chart',
+        frameSrc: '/waves-dashboard',
+      },
+    },
+  ]
 }
