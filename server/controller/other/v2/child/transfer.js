@@ -440,15 +440,15 @@ const configFileMapping = {
     path.join('/config/default_config/other.yaml')
   ],
   mysSet: [
-    path.join('/plugins/genshin/config/mys.set.yaml'),
+    path.join('/plugins/genshin/config/config/mys.set.yaml'),
     path.join('/plugins/genshin/defSet/mys/set.yaml')
   ],
   mysPubCk: [
-    path.join('/plugins/genshin/config/mys.pubCk.yaml'),
+    path.join('/plugins/genshin/config/config/mys.pubCk.yaml'),
     path.join('/plugins/genshin/defSet/mys/pubCk.yaml')
   ],
   pushNews: [
-    path.join('/plugins/genshin/config/mys.pushNews.yaml'),
+    path.join('/plugins/genshin/config/config/mys.pushNews.yaml'),
     path.join('/plugins/genshin/defSet/mys/pushNews.yaml')
   ]
 }

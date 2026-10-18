@@ -9,9 +9,17 @@ export async function useMenuList() {
   if (isV2) return useMenuListV2()
   const menus = []
   menus.push(SystemMenus.home)
+  menus.push(SystemMenus.dashboard)
+  menus.push(SystemMenus.screen)
+  menus.push(SystemMenus.groups)
+  menus.push(SystemMenus.usersData)
+  menus.push(SystemMenus.pluginsData)
+  menus.push(SystemMenus.sign)
+  menus.push(SystemMenus.data)
   menus.push(SystemMenus.config)
   menus.push(...(await usePluginsMenu()))
   menus.push(SystemMenus.account)
+  menus.push(SystemMenus.uid)
   menus.push(SystemMenus.about)
   return menus
 }

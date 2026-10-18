@@ -15,6 +15,7 @@
     "#guoba.framework.utils": "./framework/src/utils/common.js"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "2.1.1"

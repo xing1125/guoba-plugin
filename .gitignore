@@ -123,3 +123,8 @@ dist
 /config/*
 /test/
 /server/static/preload
+
+# WorkBuddy 会话数据与部署备份
+.workbuddy/
+server/static.bak.*
+server/static.failed

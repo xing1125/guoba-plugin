@@ -431,8 +431,8 @@ export const configFile = {
   'system.other': '/config/config/other.yaml',
   'system.server': '/config/config/server.yaml',
 
-  'genshin.gacha': '/plugins/genshin/config/gacha.set.yaml',
-  'genshin.mys.pubCk': '/plugins/genshin/config/mys.pubCk.yaml',
-  'genshin.mys.set': '/plugins/genshin/config/mys.set.yaml',
-  'genshin.role.name': '/plugins/genshin/config/role.name.yaml',
+  'genshin.gacha': '/plugins/genshin/config/config/gacha.set.yaml',
+  'genshin.mys.pubCk': '/plugins/genshin/config/config/mys.pubCk.yaml',
+  'genshin.mys.set': '/plugins/genshin/config/config/mys.set.yaml',
+  'genshin.role.name': '/plugins/genshin/config/config/role.name.yaml',
 }
