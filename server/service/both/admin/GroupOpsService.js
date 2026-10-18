@@ -67,13 +67,17 @@ export class GroupOpsService extends Service {
   /**
    * 批量清群数据
    * @param {string[]} gids 群号列表
-   * @param {'activity'|'ext'|'all'} scope activity=活跃榜 ext=签到/积分/复读等
+   * @param {'activity'|'ext'|'all'|'trace'} scope
+   *   activity=活跃榜 ext=签到/积分/复读等
+   *   all=activity+ext
+   *   trace=彻底清除残留（all + Yz:count 计数键 + 群主/群管名单 + AI 开关记录），
+   *   用于「Bot 已退群」的群——否则检测会因 Yz:count 残留一直列出该群
    * @returns {{total:number, results:{gid:number}[]}}
    */
   async clearGroups(gids, scope = 'activity') {
     const client = this.redis
     if (!client) throw new Error('Redis 未就绪')
-    if (!['activity', 'ext', 'all'].includes(scope)) throw new Error(`不支持的清除范围：${scope}`)
+    if (!['activity', 'ext', 'all', 'trace'].includes(scope)) throw new Error(`不支持的清除范围：${scope}`)
     const list = [...new Set((gids || []).map((g) => this._normGid(gidOf(g))))]
     if (!list.length) throw new Error('未指定群号')
     if (list.length > 200) throw new Error('单次最多操作 200 个群')
@@ -81,7 +85,7 @@ export class GroupOpsService extends Service {
     const results = []
     let total = 0
     for (const gid of list) {
-      const keys = this._keysFor(gid, scope)
+      const keys = scope === 'trace' ? this._traceKeysFor(gid) : this._keysFor(gid, scope)
       let n = 0
       try {
         n = Number(await client.sendCommand(['DEL', ...keys])) || 0
@@ -91,11 +95,58 @@ export class GroupOpsService extends Service {
           try { n += Number(await client.del(k)) || 0 } catch { /* 忽略 */ }
         }
       }
+      if (scope === 'trace') {
+        n += await this._scanDelCountKeys(gid)
+        // AI 开关名单里去掉该群
+        try { await client.sendCommand(['SREM', 'Yz:GMx:aiOff', gid]) } catch { /* 忽略 */ }
+      }
       total += n
       results.push({gid, deleted: n})
     }
     await this._log({action: `clear:${scope}`, detail: {gids: list, deleted: total}})
     return {total, results}
+  }
+
+  /** trace 范围的固定键：all + 群主/群管名单 */
+  _traceKeysFor(gid) {
+    return [
+      ...this._keysFor(gid, 'all'),
+      `Yz:GM:owner:${gid}`,
+      `Yz:GM:groupAdmin:${gid}`,
+    ]
+  }
+
+  /** SCAN 删除某群在 Yz:count 下的消息计数键（含 group- 前缀变体），返回删除数 */
+  async _scanDelCountKeys(gid) {
+    const client = this.redis
+    if (!client) return 0
+    const patterns = [
+      `Yz:count:*:group:${gid}:*`,
+      `Yz:count:*:group-${gid}:*`,
+      `Yz:count:*:group:${gid}`,
+      `Yz:count:*:group-${gid}`,
+    ]
+    let deleted = 0
+    for (const pattern of patterns) {
+      let cursor = '0'
+      try {
+        do {
+          const res = await client.sendCommand(['SCAN', cursor, 'MATCH', pattern, 'COUNT', '500'])
+          cursor = Array.isArray(res) ? String(res[0]) : String(res?.cursor ?? '0')
+          const keys = Array.isArray(res) ? res[1] : (res?.keys || [])
+          if (keys?.length) {
+            try {
+              deleted += Number(await client.sendCommand(['DEL', ...keys.map(String)])) || 0
+            } catch {
+              for (const k of keys) {
+                try { deleted += Number(await client.del(String(k))) || 0 } catch { /* 忽略 */ }
+              }
+            }
+          }
+        } while (cursor !== '0')
+      } catch { /* 单个 pattern 失败不阻断 */ }
+    }
+    return deleted
   }
 
   /** 某群的群主/群管名单（Redis SET） */
