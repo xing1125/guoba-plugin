@@ -55,6 +55,28 @@ export const SystemMenus = {
       icon: 'mdi:calendar-check-outline',
     },
   },
+  // 鸣潮签到（waves-js 群签到看板 · 云崽管理后台扩展）
+  wavesSign: {
+    path: '/waves-sign',
+    name: 'WavesSign',
+    component: '/guoba/system/waves-sign/index',
+    meta: {
+      perm: 'waves-sign',
+      title: '鸣潮签到',
+      icon: 'mdi:sun-clock-outline',
+    },
+  },
+  // 聊天诊断（YingAI 群聊诊断大屏 · 云崽管理后台扩展）
+  chatDiag: {
+    path: '/chat-diag',
+    name: 'ChatDiag',
+    component: '/guoba/system/chat-diag/index',
+    meta: {
+      perm: 'chat-diag',
+      title: '聊天诊断',
+      icon: 'mdi:google-circles-extended',
+    },
+  },
   // 数据总览（云崽管理后台扩展）
   dashboard: {
     path: '/dashboard',
