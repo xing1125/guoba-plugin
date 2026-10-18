@@ -22,8 +22,18 @@ export default class StatsController extends ApiController {
     this.get('/trend', this.trend)
     this.get('/games', this.games)
     this.get('/users', this.users)
+    this.get('/user-hero', this.userHero)
     this.get('/user/:uid', this.userDetail)
     this.get('/runtime', this.runtime)
+  }
+
+  /** 用户统计页 hero 聚合 */
+  async userHero(req) {
+    const err = await this._guard()
+    if (err) return err
+    const force = String(req.query?.force || '') === 'true'
+    const data = await this.statsService.getUserHero(force)
+    return Result.ok(data)
   }
 
   async _guard() {

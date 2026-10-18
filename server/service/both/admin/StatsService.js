@@ -658,6 +658,79 @@ export class StatsService extends Service {
     })
   }
 
+  /**
+   * 用户统计页 hero 聚合：总用户 / 绑定率 / 近 7 天活跃与新增 / 今日活跃 / 7 日趋势
+   * 数据来自 Users + MysUsers（bot.db）与用户消息聚合（Redis）。
+   */
+  async getUserHero(force = false) {
+    const bot = this.dbService?.getBotDb?.() || null
+    let totalUsers = 0
+    let boundUsers = 0
+    if (bot) {
+      try {
+        totalUsers = bot.prepare('SELECT COUNT(*) AS n FROM Users').get().n
+        boundUsers = bot.prepare("SELECT COUNT(*) AS n FROM Users WHERE ltuids IS NOT NULL AND ltuids <> ''").get().n
+      } catch {}
+    }
+
+    const agg = await this._aggregateUsers(force)
+    const names = this._userNameMap()
+    const day = 86400000
+    const pad = (n) => String(n).padStart(2, '0')
+    const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const today = ymd(new Date())
+    const since7 = ymd(new Date(Date.now() - 6 * day))
+
+    let active7 = 0
+    let new7 = 0
+    let activeToday = 0
+    const spark = []
+    if (agg.available) {
+      for (const r of agg.users) {
+        const dates = [...r.daily.keys()].sort()
+        const first = dates[0] || ''
+        const last = dates[dates.length - 1] || ''
+        if (last >= since7) active7++
+        if (first && first >= since7) new7++
+        if (last === today) activeToday++
+      }
+      // 近 7 天逐日消息
+      for (let i = 6; i >= 0; i--) {
+        const d = ymd(new Date(Date.now() - i * day))
+        const hit = (agg.trend || []).find((t) => t.date === d)
+        spark.push({date: d, total: hit ? (hit.recv || 0) + (hit.send || 0) : 0})
+      }
+    }
+
+    const msg7 = spark.reduce((n, s) => n + s.total, 0)
+    const yesterday = spark.length > 1 ? spark[spark.length - 2].total : 0
+
+    // 最活跃用户 TOP5
+    let top = []
+    if (agg.available) {
+      top = [...agg.users]
+        .map((r) => ({
+          uid: r.uid,
+          name: names.get(r.uid) || '',
+          total: r.recvTotal + r.sendTotal,
+          activeDays: r.days.size,
+          lastDate: [...r.daily.keys()].sort().pop() || '',
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5)
+    }
+
+    return {
+      available: agg.available,
+      users: {total: totalUsers, bound: boundUsers, bindRate: totalUsers ? Math.round((boundUsers / totalUsers) * 100) : 0},
+      active: {today: activeToday, last7: active7, new7},
+      message: {today: spark[spark.length - 1]?.total || 0, yesterday, last7: msg7},
+      spark,
+      top,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
   /** 用户列表（分页 + 关键词 + 排序），self=只看 bot 自己发送 */
   async queryUsers({keyword = '', sort = 'total', order = 'desc', page = 1, size = 20, scope = 'all'} = {}) {
     const agg = await this._aggregateUsers()
