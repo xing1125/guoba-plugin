@@ -305,9 +305,14 @@ export class StatsService extends Service {
   /**
    * 群聚合：消息量（收/发）、最近活跃日、活跃榜人数、排行参与人数、绑定用户数
    * 数据源：Yz:count:*:msg:group:* / Yz:GM:active* / Yz:GMx:dayTotal:* / miao:rank:*@chatroom* / Yz:group_id:*
+   * @param {boolean} force 跳过缓存
+   * @param {{includeLeft?: boolean}} opts includeLeft=true 时保留 Bot 已退群的残留数据群
+   *   （默认隐藏——清理过的/已退群的群不再出现在后台列表，无效群检测用 true 取全量）
    */
-  async _aggregateGroups(force = false) {
-    return this._cached('groups', CACHE_TTL.groups, async () => {
+  async _aggregateGroups(force = false, opts = {}) {
+    const includeLeft = opts?.includeLeft === true
+    const cacheKey = includeLeft ? 'groups:all' : 'groups'
+    return this._cached(cacheKey, CACHE_TTL.groups, async () => {
       const client = this.redis
       if (!client) return {available: false, groups: [], trend: []}
 
@@ -449,8 +454,11 @@ export class StatsService extends Service {
 
       groups.sort((a, b) => b.total - a.total)
 
+      // 默认隐藏 Bot 已退群的残留群（清不清理都不再出现在后台群列表）
+      const visible = includeLeft ? groups : groups.filter((g) => nameMap.has(g.gid))
+
       const trend = [...trendMap.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
-      return {available: true, groups, trend, updatedAt: new Date().toISOString()}
+      return {available: true, groups: visible, trend, updatedAt: new Date().toISOString()}
     })
   }
 
@@ -882,9 +890,9 @@ export class StatsService extends Service {
     }
   }
 
-  /** 供 SyncService 复用：群快照（不受内存缓存影响） */
+  /** 供 SyncService / 无效群检测复用：群快照（不受内存缓存影响，含已退群残留） */
   async snapshotGroups() {
-    const agg = await this._aggregateGroups(true)
+    const agg = await this._aggregateGroups(true, {includeLeft: true})
     return agg.groups || []
   }
 
