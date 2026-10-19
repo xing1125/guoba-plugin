@@ -8,6 +8,7 @@ import {ApiController} from '#guoba.platform'
 export class AuthController extends ApiController {
 
   authService = autowired('authService')
+  loginService = autowired('loginService')
 
   constructor(guobaApp) {
     super('/admin/auth', guobaApp)
@@ -29,6 +30,8 @@ export class AuthController extends ApiController {
     this.post('/password', this.changePassword)
     // 登录日志
     this.get('/login-log', this.loginLog)
+    // 移动端访问链接（复刻 #锅巴登录 快捷通道）
+    this.post('/quick-link', this.quickLink)
   }
 
   _actor(req) {
@@ -129,6 +132,25 @@ export class AuthController extends ApiController {
       }
       const limit = Number(q.limit) || 50
       return Result.ok(this.authService.db?.queryLoginLog?.({limit}) || [])
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  /** 生成移动端访问链接（与 #锅巴登录 同通道，快捷码 180s 有效，token 24h） */
+  async quickLink(req) {
+    try {
+      const username = this._actor(req) || 'admin'
+      const webAddress = await this.loginService.setQuickLogin(username)
+      // webAddress: { 网络名: [ 'http://ip:port/guoba/#/ml/code', ... ] }
+      const links = []
+      for (const urls of Object.values(webAddress || {})) {
+        for (const u of urls || []) {
+          if (!links.includes(u)) links.push(u)
+        }
+      }
+      this._audit(req, 'auth:quick-link', username)
+      return Result.ok({links, expiresIn: 180})
     } catch (e) {
       return Result.error(e.message)
     }
