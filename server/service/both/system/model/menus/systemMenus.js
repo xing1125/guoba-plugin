@@ -8,7 +8,7 @@ export const SystemMenus = {
     meta: {
       perm: 'home',
       title: '首页',
-      icon: 'bx:bx-home',
+      icon: 'lucide:home',
     },
   },
   // 账号管理
@@ -19,7 +19,7 @@ export const SystemMenus = {
     meta: {
       perm: 'account',
       title: '账号管理',
-      icon: 'ant-design:user-outlined',
+      icon: 'lucide:fingerprint',
     },
   },
   // 游戏 UID（云崽管理后台扩展）
@@ -30,7 +30,7 @@ export const SystemMenus = {
     meta: {
       perm: 'uid',
       title: '游戏 UID',
-      icon: 'mdi:gamepad-variant-outline',
+      icon: 'lucide:gamepad-2',
     },
   },
   // 数据管理（云崽管理后台扩展）
@@ -41,7 +41,7 @@ export const SystemMenus = {
     meta: {
       perm: 'data',
       title: '数据管理',
-      icon: 'mdi:database-cog-outline',
+      icon: 'lucide:database',
     },
   },
   // 签到中心（游戏签到 + 鸣潮签到，页内 tab 切换 · 云崽管理后台扩展）
@@ -52,7 +52,7 @@ export const SystemMenus = {
     meta: {
       perm: 'sign',
       title: '签到中心',
-      icon: 'mdi:calendar-check-outline',
+      icon: 'lucide:calendar-check',
     },
   },
   // 鸣潮签到已并入 /sign 的页内 tab；waves-js 看板仍可经插件菜单 /plugin/extra/waves-dashboard 访问
@@ -64,7 +64,7 @@ export const SystemMenus = {
     meta: {
       perm: 'nav-mgr',
       title: '导航管理',
-      icon: 'ion:settings-outline',
+      icon: 'lucide:list-checks',
     },
   },
   // 聊天诊断（YingAI 群聊诊断大屏 · 云崽管理后台扩展）
@@ -75,7 +75,7 @@ export const SystemMenus = {
     meta: {
       perm: 'chat-diag',
       title: '聊天诊断',
-      icon: 'mdi:google-circles-extended',
+      icon: 'lucide:activity',
     },
   },
   // 数据总览（云崽管理后台扩展）
@@ -86,7 +86,7 @@ export const SystemMenus = {
     meta: {
       perm: 'dashboard',
       title: '数据总览',
-      icon: 'ant-design:dashboard-outlined',
+      icon: 'lucide:layout-dashboard',
     },
   },
   // 状态大屏（云崽管理后台扩展）
@@ -97,7 +97,7 @@ export const SystemMenus = {
     meta: {
       perm: 'screen',
       title: '状态大屏',
-      icon: 'ant-design:fund-projection-screen-outlined',
+      icon: 'lucide:gauge',
     },
   },
   // 系统信息（云崽管理后台扩展）
@@ -108,7 +108,7 @@ export const SystemMenus = {
     meta: {
       perm: 'sysinfo',
       title: '系统信息',
-      icon: 'ant-design:desktop-outlined',
+      icon: 'lucide:cpu',
     },
   },
   // 文件管理（云崽管理后台扩展）
@@ -119,7 +119,7 @@ export const SystemMenus = {
     meta: {
       perm: 'files',
       title: '文件管理',
-      icon: 'ant-design:folder-open-outlined',
+      icon: 'lucide:folder-open',
     },
   },
   // 喵喵面板图（云崽管理后台扩展）
@@ -130,7 +130,7 @@ export const SystemMenus = {
     meta: {
       perm: 'miao-img',
       title: '喵喵面板图',
-      icon: 'ant-design:picture-outlined',
+      icon: 'lucide:image',
     },
   },
   // 群数据（云崽管理后台扩展）
@@ -141,7 +141,7 @@ export const SystemMenus = {
     meta: {
       perm: 'groups',
       title: '群数据',
-      icon: 'mdi:account-group-outline',
+      icon: 'lucide:users',
     },
   },
   // 用户数据（云崽管理后台扩展）
@@ -152,7 +152,7 @@ export const SystemMenus = {
     meta: {
       perm: 'users-data',
       title: '用户数据',
-      icon: 'mdi:account-multiple-outline',
+      icon: 'lucide:user',
     },
   },
   // AI 私聊（YingAIPrivate · 云崽管理后台扩展）
@@ -163,7 +163,7 @@ export const SystemMenus = {
     meta: {
       perm: 'yingai',
       title: 'AI 私聊',
-      icon: 'mdi:account-multiple-outline',
+      icon: 'lucide:bot',
     },
   },
   // 插件数据（云崽管理后台扩展）
@@ -174,7 +174,7 @@ export const SystemMenus = {
     meta: {
       perm: 'plugins-data',
       title: '插件数据',
-      icon: 'mdi:puzzle-outline',
+      icon: 'lucide:puzzle',
     },
   },
   // 配置管理
@@ -185,7 +185,7 @@ export const SystemMenus = {
     meta: {
       perm: 'config',
       title: '配置管理',
-      icon: 'ion:settings-outline',
+      icon: 'lucide:sliders-horizontal',
     },
   },
   // 后台用户与角色（RBAC）
@@ -196,7 +196,7 @@ export const SystemMenus = {
     meta: {
       perm: 'sys-users',
       title: '后台用户',
-      icon: 'ant-design:team-outlined',
+      icon: 'lucide:shield-check',
     },
   },
   // 审计日志
@@ -207,7 +207,7 @@ export const SystemMenus = {
     meta: {
       perm: 'audit',
       title: '审计日志',
-      icon: 'ant-design:audit-outlined',
+      icon: 'lucide:clipboard-list',
     },
   },
   // 关于
@@ -219,7 +219,7 @@ export const SystemMenus = {
     meta: {
       perm: 'logs',
       title: '运行日志',
-      icon: 'ant-design:file-text-outlined',
+      icon: 'lucide:terminal',
     },
   },
   about: {
@@ -229,7 +229,7 @@ export const SystemMenus = {
     meta: {
       perm: 'about',
       title: '关于',
-      icon: 'ant-design:info-circle-outlined',
+      icon: 'lucide:info',
     },
   },
 }

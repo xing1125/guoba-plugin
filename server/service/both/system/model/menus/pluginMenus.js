@@ -8,7 +8,7 @@ const pluginsStoreMenu = {
   meta: {
     title: '插件管理',
     // icon: 'uil:store',
-    icon: 'clarity:plugin-line',
+    icon: 'lucide:puzzle',
   },
 }
 
@@ -18,7 +18,7 @@ const pluginsIndexMenu = {
   component: '/guoba/plugins/index',
   meta: {
     title: '插件列表',
-    icon: 'ic:round-view-list',
+    icon: 'lucide:list',
   },
 }
 
@@ -38,7 +38,7 @@ export async function usePluginsMenu() {
       component: `/guoba/plugins/plugin-detail/index`,
       meta: {
         title: value.pluginInfo?.title ?? name,
-        icon: value.pluginInfo?.icon ?? 'clarity:plugin-line',
+        icon: value.pluginInfo?.icon ?? 'lucide:puzzle',
         ignoreRoute: true,
       },
       guobaMeta: {
@@ -79,9 +79,9 @@ export async function usePluginsMenu() {
         component: '/guoba/plugins/index',
         meta: {
           title: '插件配置',
-          // icon: 'clarity:plugin-line',
+          // icon: 'lucide:puzzle',
           // icon: 'arcticons:game-plugins',
-          icon: 'ion:settings-outline',
+          icon: 'lucide:settings-2',
         },
         // 重定向到
         redirect: pluginsIndexMenu.path,
@@ -102,7 +102,7 @@ const miaoMenu = {
   component: '/guoba/plugins/extra-config/miao-plugin/index',
   meta: {
     title: '喵喵帮助',
-    icon: 'twemoji:heart-with-ribbon',
+    icon: 'lucide:heart',
   },
 }
 
@@ -145,7 +145,7 @@ async function useWavesPluginMenu() {
       name: 'WavesDashboard',
       meta: {
         title: '鸣潮签到看板',
-        icon: 'ion:stats-chart',
+        icon: 'lucide:line-chart',
         frameSrc: '/waves-dashboard',
       },
     },
