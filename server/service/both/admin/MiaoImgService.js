@@ -272,6 +272,108 @@ export class MiaoImgService extends Service {
     return {kind, name, file: base, trash: `temp/guoba-trash/${trashName}`}
   }
 
+  /** 真正创建角色目录（幂等）——先建好文件夹，可往里手动复制/上传图片 */
+  async mkdir(kind, name, ctx = {}) {
+    const {k, charDirRel, resRel} = this._charDir(kind, name, false)
+    const existed = fs.existsSync(path.join(k.base, charDirRel))
+    if (!existed) {
+      this._charDir(kind, name, true)
+    }
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'miaoImg.mkdir',
+      target: `miao/${kind}/${charDirRel.replace(/\\/g, '/')}`,
+      detail: {existed},
+    })
+    return {kind, name, existed, dir: resRel}
+  }
+
+  /** 重命名图片（可改扩展名，但必须在白名单内；目标重名拒绝） */
+  async rename(kind, name, from, to, ctx = {}) {
+    const {k, dir, charDirRel, resRel} = this._charDir(kind, name)
+    const src = String(from || '').trim()
+    const dst = String(to || '').trim()
+    if (!src || src.includes('/') || src.includes('\\') || src !== path.basename(src)) {
+      throw new Error('原文件名不合法')
+    }
+    if (!dst || dst.includes('/') || dst.includes('\\') || /[\\/:*?"<>|]/.test(dst) || dst.length > 100) {
+      throw new Error('新文件名不合法')
+    }
+    const srcPath = path.join(dir, src)
+    if (!fs.existsSync(srcPath)) {
+      throw new Error('图片不存在')
+    }
+    const extTo = path.extname(dst).toLowerCase()
+    if (!extTo) {
+      throw new Error(`新名字要带扩展名，${k.label}支持：${[...k.exts].join(' ')}`)
+    }
+    if (!k.exts.has(extTo) || !MIME[extTo]) {
+      throw new Error(`不支持的扩展名 ${extTo}，${k.label}支持：${[...k.exts].join(' ')}`)
+    }
+    const dstPath = path.join(dir, dst)
+    if (fs.existsSync(dstPath)) {
+      throw new Error(`目标文件已存在：${dst}`)
+    }
+    // 改扩展名时校验内容 magic number，防止把非图片改成图片后缀
+    if (extTo !== path.extname(src).toLowerCase()) {
+      const head = fs.readFileSync(srcPath).subarray(0, 12)
+      if (!this._sniffMime(head, extTo)) {
+        throw new Error(`文件内容不是 ${extTo.slice(1)} 格式，拒绝改后缀`)
+      }
+    }
+    fs.renameSync(srcPath, dstPath)
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'miaoImg.rename',
+      target: `miao/${kind}/${charDirRel.replace(/\\/g, '/')}/${src}`,
+      detail: {to: dst},
+    })
+    return {kind, name, from: src, to: dst, rel: `${resRel}/${dst}`}
+  }
+
+  /** 图片 magic number 快速嗅探（png/jpg/webp/gif） */
+  _sniffMime(head, ext) {
+    if (ext === '.png') {
+      return head.length >= 8 && head[0] === 0x89 && head.toString('ascii', 1, 4) === 'PNG'
+    }
+    if (ext === '.jpg' || ext === '.jpeg') {
+      return head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff
+    }
+    if (ext === '.gif') {
+      return head.length >= 6 && head.toString('ascii', 0, 3) === 'GIF'
+    }
+    if (ext === '.webp') {
+      return head.length >= 12 && head.toString('ascii', 0, 4) === 'RIFF' && head.toString('ascii', 8, 12) === 'WEBP'
+    }
+    return false
+  }
+
+  /** 重命名角色目录（四类共用 base/<角色名> 这一层；写真/小清新的子目录随目录一起移动） */
+  async renameDir(kind, from, to, ctx = {}) {
+    const k = this._kind(kind)
+    const f = this._checkName(from)
+    const t = this._checkName(to)
+    if (f === t) {
+      throw new Error('新名字与原名相同')
+    }
+    const src = path.join(k.base, f)
+    const dst = path.join(k.base, t)
+    if (!fs.existsSync(src)) {
+      throw new Error('角色目录不存在')
+    }
+    if (fs.existsSync(dst)) {
+      throw new Error(`目标目录已存在：${t}`)
+    }
+    fs.renameSync(src, dst)
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'miaoImg.renameDir',
+      target: `miao/${kind}/${f}`,
+      detail: {to: t},
+    })
+    return {kind, from: f, to: t}
+  }
+
   /** 读取图片二进制（供浏览器预览）；rel 限定在两类图片目录内 */
   readImage(rel) {
     const relNorm = String(rel || '').replace(/\\/g, '/').replace(/^\/+/, '')

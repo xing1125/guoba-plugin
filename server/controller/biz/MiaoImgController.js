@@ -10,6 +10,9 @@ import {ApiController} from '#guoba.platform'
  *   GET  /characters?kind=profile|character|art   有图的角色清单
  *   GET  /list?kind=&name=                    某角色图片列表
  *   POST /upload   (multipart: kind,name,files[])  上传（md5 命名，与喵喵约定一致）
+ *   POST /mkdir    {kind,name}                  创建角色目录（幂等，先建文件夹可手动复制图片）
+ *   POST /rename   {kind,name,from,to}          重命名图片（可改后缀，白名单+magic number 校验）
+ *   POST /rename-dir {kind,from,to}             重命名角色目录
  *   POST /delete   {kind,name,file,confirm}        删除（移入回收站）
  *   GET  /img?rel=                                 图片二进制预览（rel 限定在图片目录内）
  *
@@ -34,6 +37,9 @@ export default class MiaoImgController extends ApiController {
     this.get('/characters', this.characters)
     this.get('/list', this.list)
     this.post('/upload', this.upload)
+    this.post('/mkdir', this.mkdir)
+    this.post('/rename', this.rename)
+    this.post('/rename-dir', this.renameDir)
     this.post('/delete', this.remove)
     this.get('/img', this.img)
   }
@@ -125,6 +131,57 @@ export default class MiaoImgController extends ApiController {
         }
       }
       return Result.ok({saved, failed, count: saved.length})
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  async mkdir(req) {
+    if (!this._rateLimit(req, 'miaoMkdir', 30)) {
+      return Result.error('操作过于频繁，请稍后再试')
+    }
+    try {
+      const data = await this.miaoImgService.mkdir(
+        String(req.body?.kind || ''),
+        String(req.body?.name || ''),
+        this._ctx(req),
+      )
+      return Result.ok(data)
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  async rename(req) {
+    if (!this._rateLimit(req, 'miaoRename', 30)) {
+      return Result.error('操作过于频繁，请稍后再试')
+    }
+    try {
+      const data = await this.miaoImgService.rename(
+        String(req.body?.kind || ''),
+        String(req.body?.name || ''),
+        String(req.body?.from || ''),
+        String(req.body?.to || ''),
+        this._ctx(req),
+      )
+      return Result.ok(data)
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  async renameDir(req) {
+    if (!this._rateLimit(req, 'miaoRenameDir', 20)) {
+      return Result.error('操作过于频繁，请稍后再试')
+    }
+    try {
+      const data = await this.miaoImgService.renameDir(
+        String(req.body?.kind || ''),
+        String(req.body?.from || ''),
+        String(req.body?.to || ''),
+        this._ctx(req),
+      )
+      return Result.ok(data)
     } catch (e) {
       return Result.error(e.message)
     }
