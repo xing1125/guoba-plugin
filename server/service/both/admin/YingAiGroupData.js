@@ -97,7 +97,10 @@ export function createYingAiGroupData(pluginDir) {
   /** 可选筛选元信息：可用日期 + 群（带真名） */
   async function meta() {
     const {stats, rows, files, names} = await load({})
-    const gids = [...new Set(rows.map((r) => String(r.gid || '')))].filter(Boolean)
+    // V47.39：rows 现在也含主动发言行（source='proactive'）。群列表与「总轮次」保持 chat 口径，
+    //   主动维度单独由 dashboard().proactive 提供，避免两套数字互相打架。
+    const chatRows = rows.filter((r) => String(r.source || '') !== 'proactive')
+    const gids = [...new Set(chatRows.map((r) => String(r.gid || '')))].filter(Boolean)
     const groups = gids.map((gid) => {
       const name = names.get(gid) || ''
       const short = gid.replace('@chatroom', '')
@@ -106,13 +109,14 @@ export function createYingAiGroupData(pluginDir) {
         name,
         label: name || `群 ${short.slice(-6)}`,
         short: short.slice(-6),
-        n: rows.filter((r) => String(r.gid) === gid).length,
+        n: chatRows.filter((r) => String(r.gid) === gid).length,
       }
     }).sort((a, b) => b.n - a.n)
     return {
       dates: files.map((f) => ({date: f.date, sizeKB: Math.round(f.size / 1024)})),
       groups,
-      total: rows.length,
+      total: chatRows.length,
+      proactiveTotal: rows.length - chatRows.length,
       updatedAt: new Date().toISOString(),
     }
   }

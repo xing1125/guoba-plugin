@@ -44,28 +44,18 @@ export const SystemMenus = {
       icon: 'mdi:database-cog-outline',
     },
   },
-  // 游戏签到（云崽管理后台扩展）
+  // 签到中心（游戏签到 + 鸣潮签到，页内 tab 切换 · 云崽管理后台扩展）
   sign: {
     path: '/sign',
     name: 'Sign',
     component: '/guoba/system/sign/index',
     meta: {
       perm: 'sign',
-      title: '游戏签到',
+      title: '签到中心',
       icon: 'mdi:calendar-check-outline',
     },
   },
-  // 鸣潮签到（waves-js 群签到看板 · 云崽管理后台扩展）
-  wavesSign: {
-    path: '/waves-sign',
-    name: 'WavesSign',
-    component: '/guoba/system/waves-sign/index',
-    meta: {
-      perm: 'waves-sign',
-      title: '鸣潮签到',
-      icon: 'mdi:sun-clock-outline',
-    },
-  },
+  // 鸣潮签到已并入 /sign 的页内 tab；waves-js 看板仍可经插件菜单 /plugin/extra/waves-dashboard 访问
   // 聊天诊断（YingAI 群聊诊断大屏 · 云崽管理后台扩展）
   chatDiag: {
     path: '/chat-diag',

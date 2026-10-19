@@ -25,6 +25,7 @@ export default class StatsController extends ApiController {
     this.get('/user-hero', this.userHero)
     this.get('/user/:uid', this.userDetail)
     this.get('/runtime', this.runtime)
+    this.get('/live', this.live)
   }
 
   /** 用户统计页 hero 聚合 */
@@ -54,6 +55,15 @@ export default class StatsController extends ApiController {
   /** 机器人本体运行状态（状态大屏用，CPU 占用为两次请求间采样差值） */
   async runtime() {
     const data = await this.statsService.getRuntime()
+    return Result.ok(data)
+  }
+
+  /**
+   * 实时脉冲：今日/累计消息数 + Redis 键数。
+   * 大屏高频轮询（2~3 秒）用，代价只有 1 次 MGET + 1 次 DBSIZE。
+   */
+  async live() {
+    const data = await this.statsService.getLive()
     return Result.ok(data)
   }
 

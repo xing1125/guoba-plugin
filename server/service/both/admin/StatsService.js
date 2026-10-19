@@ -1,5 +1,7 @@
 import {autowired, Service} from '#guoba.framework'
 import os from 'node:os'
+import fs from 'node:fs'
+import path from 'node:path'
 
 /**
  * 插件数据 / 群数据 统计服务（Redis 聚合）
@@ -152,6 +154,20 @@ export class StatsService extends Service {
       for (let j = 0; j < part.length; j++) out.push([part[j], vals[j]])
     }
     return out
+  }
+
+  /**
+   * 简单节流缓存：大屏 2 秒轮询下，磁盘/日志这类「变化慢 + 同步 IO」的项没必要每次都读。
+   * 仅用于同步函数（不缓存 Promise）。
+   */
+  _throttle(key, ttl, fn) {
+    const now = Date.now()
+    this._thr ??= {}
+    const hit = this._thr[key]
+    if (hit && hit.until > now) return hit.val
+    const val = fn()
+    this._thr[key] = {val, until: now + ttl}
+    return val
   }
 
   _today() {
@@ -337,7 +353,8 @@ export class StatsService extends Service {
         const gid = this._normGid(parts[5])
         const date = `${parts[6]}-${parts[7]}-${parts[8] ?? ''}`.replace(/-$/, '')
         if (!gid || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
-        return {gid, date, dir}
+        // raw = 键里的原始群号（可能带 group- 前缀），重建键时必须用它，否则会漏读
+        return {gid, raw: parts[5], date, dir}
       }
 
       const recvParsed = recvKeys.map((k) => [k, parse(k, 'recv')]).filter(([, p]) => p)
@@ -351,6 +368,7 @@ export class StatsService extends Service {
         const n = Number(valMap.get(key)) || 0
         if (!n) continue
         const r = ensure(p.gid)
+        if (p.raw && !r.rawGid) r.rawGid = p.raw
         r[p.dir] += n
         r.total += n
         r.days += 1
@@ -434,6 +452,8 @@ export class StatsService extends Service {
         const dailyArr = [...r.daily.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
         return {
           gid: r.gid,
+          /** Redis 键里的原始群号；重建计数键时用它 */
+          rawGid: r.rawGid || r.gid,
           name: nameMap.get(r.gid) || '',
           // nameMap 的 key 即运行时在群集合：false = Bot 已不在该群（无群名属正常）
           inGroup: nameMap.has(r.gid),
@@ -969,6 +989,92 @@ export class StatsService extends Service {
     return agg.groups || []
   }
 
+  /**
+   * 实时脉冲（大屏 2~3 秒轮询专用）。
+   *
+   * 为什么不用 getOverviewCards：它要 SCAN 全库（5 万键约 120ms）+ 60 秒缓存，
+   * 高频调用既贵又「不快」。这里直接按群读今日/累计计数键：
+   *   Yz:count:{receive|send}:msg:group:<rawGid>:{YYYY:MM:DD|total}
+   * 群号清单取自 60 秒缓存的群聚合 → 稳态下只有 1 次 MGET + 1 次 DBSIZE，亚毫秒级。
+   * 口径与 _groupSummary 完全一致（同一批键），不会出现两个数打架。
+   */
+  async getLive() {
+    const client = this.redis
+    const at = new Date().toISOString()
+    if (!client) {
+      return {available: false, day: this._today(), todayMsg: 0, todayRecv: 0, todaySend: 0,
+        totalMsg: 0, activeToday: 0, groups: {}, redisKeys: 0, at}
+    }
+
+    const day = this._today().replace(/-/g, ':')
+    let groups = []
+    try {
+      const agg = await this._aggregateGroups()
+      groups = agg?.groups || []
+    } catch {
+      groups = []
+    }
+
+    const keys = []
+    for (const g of groups) {
+      const raw = g.rawGid || g.gid
+      if (!raw) continue
+      keys.push(`Yz:count:receive:msg:group:${raw}:${day}`)
+      keys.push(`Yz:count:send:msg:group:${raw}:${day}`)
+      keys.push(`Yz:count:receive:msg:group:${raw}:total`)
+      keys.push(`Yz:count:send:msg:group:${raw}:total`)
+    }
+
+    let valMap = new Map()
+    if (keys.length) {
+      try {
+        valMap = new Map(await this._mget(keys))
+      } catch {
+        valMap = new Map()
+      }
+    }
+
+    let todayMsg = 0
+    let todayRecv = 0
+    let todaySend = 0
+    let totalMsg = 0
+    let activeToday = 0
+    const byGroup = {}
+    for (const g of groups) {
+      const raw = g.rawGid || g.gid
+      if (!raw) continue
+      const r = Number(valMap.get(`Yz:count:receive:msg:group:${raw}:${day}`)) || 0
+      const s = Number(valMap.get(`Yz:count:send:msg:group:${raw}:${day}`)) || 0
+      byGroup[g.gid] = r + s
+      todayRecv += r
+      todaySend += s
+      todayMsg += r + s
+      if (r + s > 0) activeToday += 1
+      totalMsg += (Number(valMap.get(`Yz:count:receive:msg:group:${raw}:total`)) || 0) +
+        (Number(valMap.get(`Yz:count:send:msg:group:${raw}:total`)) || 0)
+    }
+
+    let redisKeys = 0
+    try {
+      redisKeys = await client.dbSize()
+    } catch {
+      /* 忽略 */
+    }
+
+    return {
+      available: true,
+      day: this._today(),
+      todayMsg,
+      todayRecv,
+      todaySend,
+      totalMsg,
+      activeToday,
+      groups: byGroup,
+      redisKeys,
+      at,
+    }
+  }
+
   /* ---------------------------- 机器人运行时状态（状态大屏） ---------------------------- */
 
   /**
@@ -991,31 +1097,92 @@ export class StatsService extends Service {
     }
     let cpuUsage = null
     if (this._lastCpu && total > this._lastCpu.total) {
-      cpuUsage = Math.round((1 - (idle - this._lastCpu.idle) / (total - this._lastCpu.total)) * 1000) / 10
+      const raw = (1 - (idle - this._lastCpu.idle) / (total - this._lastCpu.total)) * 100
+      // 大屏 2 秒采一次，原始差值抖动大；做一次指数平滑让指针稳一点（仍能反映突变）
+      this._cpuEma = this._cpuEma == null ? raw : this._cpuEma * 0.45 + raw * 0.55
+      cpuUsage = Math.round(this._cpuEma * 10) / 10
     }
     this._lastCpu = {idle, total}
 
-    // Redis：键数 + 版本
+    // Redis：键数 + 版本。版本号恒定，取到一次就不再请求（高频轮询下省一条命令）
     let redisKeys = 0
     let redisVersion = null
     const client = this.redis
     if (client) {
       try {
         redisKeys = await client.dbSize()
-        const info = await client.info('server')
-        const m = /redis_version:([\d.]+)/.exec(info || '')
-        if (m) redisVersion = m[1]
+        if (!this._redisVer) {
+          const info = await client.info('server')
+          const m = /redis_version:([\d.]+)/.exec(info || '')
+          if (m) this._redisVer = m[1]
+        }
+        redisVersion = this._redisVer || null
       } catch {}
     }
 
     // 在线账号（适配器结构不统一，字段全部兜底）
+    //
+    // ⚠️ 踩坑记录（两次）：
+    // ① Bot.bots 里多数条目是 adapter 注册的空壳，Object.values 会得到一堆「未知适配器」；
+    // ② 反过来用 Object.entries 的 key 兜底更糟 —— Bot.bots 自身带 url/logger/xlogin
+    //    这类内部属性，会被当成账号显示出来。
+    // 结论：以 Bot.uin 集合为准（内核维护的权威在线列表），bots 只用来补昵称/平台。
+    const uinList = Array.from(globalThis.Bot?.uin || [])
+      .map((u) => String(u ?? '').trim())
+      .filter(Boolean)
     const botsMap = globalThis.Bot?.bots
-    const botList = (botsMap instanceof Map ? [...botsMap.values()] : Object.values(botsMap || {})).map((b) => ({
-      uin: String(b?.uin ?? ''),
-      nickname: b?.nickname ?? '',
-      platform: b?.platform ?? null,
-      status: b?.stat?.status ?? null,
-    }))
+    const pickBot = (uin) => (botsMap instanceof Map ? botsMap.get(uin) : botsMap?.[uin])
+    const adapterList = Array.isArray(globalThis.Bot?.adapter)
+      ? globalThis.Bot.adapter.map((a) => ({id: String(a?.id || ''), name: String(a?.name || '')}))
+      : []
+    // Bot.bots 自身不会出现在 uin 集合里，但为兼容「uin 集合为空」的老内核，再做一次 entries 兜底
+    const fallbackEntries = (botsMap instanceof Map ? [...botsMap.entries()] : Object.entries(botsMap || {})).filter(
+      ([, b]) => b && typeof b === 'object' && (b.uin || b.stat || b.fl || b.gl),
+    )
+
+    const resolvePlatform = (b, uin) => {
+      const a = b?.adapter
+      let platform = null
+      if (typeof a === 'string') platform = a
+      else if (a && typeof a === 'object') platform = a.name || a.id || null
+      if (!platform) platform = b?.platform || null
+      if (!platform) {
+        const hit = adapterList.find((x) => x.id && (x.id === uin || String(b?.adapter?.id || '') === x.id))
+        platform = hit?.name || null
+      }
+      return platform ? String(platform) : null
+    }
+
+    let botList = uinList.map((uin) => {
+      const b = pickBot(uin) || {}
+      return {
+        uin,
+        nickname: String(b?.nickname ?? b?.account?.nickname ?? b?.bot?.nickname ?? '').trim(),
+        platform: resolvePlatform(b, uin),
+        status: b?.stat?.status ?? null,
+        // 出现在 Bot.uin 集合里即视为在线（这是内核的权威在线列表）
+        online: true,
+      }
+    })
+
+    if (!botList.length && fallbackEntries.length) {
+      botList = fallbackEntries
+        .map(([key, b]) => {
+          const uin = String(b?.uin ?? b?.account?.uin ?? b?.bot?.uin ?? key ?? '').trim()
+          return {
+            uin,
+            nickname: String(b?.nickname ?? b?.account?.nickname ?? b?.bot?.nickname ?? '').trim(),
+            platform: resolvePlatform(b, uin),
+            status: b?.stat?.status ?? null,
+            online: b?.stat?.online === 2 || !!b?.stat?.start_time || !!uin,
+          }
+        })
+        .filter((b) => b.uin && b.uin !== 'undefined' && b.uin !== 'null')
+    }
+
+    // 同 uin 去重，避免多 adapter 重复注册
+    const seen = new Set()
+    botList = botList.filter((b) => (seen.has(b.uin) ? false : (seen.add(b.uin), true)))
 
     return {
       available: !!client,
@@ -1026,6 +1193,7 @@ export class StatsService extends Service {
         hostname: os.hostname(),
         osRelease: `${os.type()} ${os.release()}`,
         cpuModel: cpus[0]?.model?.trim() ?? '',
+        /** os.cpus().length 是逻辑核心（含超线程），Node 无物理核 API，前端须标「逻辑核心」 */
         cpuCores: cpus.length,
       },
       nodeVersion: process.version,
@@ -1041,9 +1209,84 @@ export class StatsService extends Service {
         rss: proc.rss,
         heapUsed: proc.heapUsed,
         heapTotal: proc.heapTotal,
+        /** 堆使用率：接近 90% 预示 OOM，大屏单独展示 */
+        heapPct: proc.heapTotal ? Math.round((proc.heapUsed / proc.heapTotal) * 1000) / 10 : 0,
       },
+      disk: this._throttle('disk', 10 * 1000, () => this._readDisk()),
+      /** AI 引擎用量（读 YingAI 落盘文件，插件未装/当日无调用返回 null） */
+      ai: this._readAiUsage(),
+      logs: this._throttle('logs', 5 * 1000, () => this._readLogs()),
       redis: {keys: redisKeys, version: redisVersion},
       bots: botList,
     }
+  }
+
+  /**
+   * 磁盘占用。Windows 上 statfsSync 对 cwd 可用；失败返回 null（前端显 N/A，不要显 0）。
+   */
+  _readDisk() {
+    try {
+      if (typeof fs.statfsSync !== 'function') return null
+      const st = fs.statfsSync(process.cwd())
+      const total = st.blocks * st.bsize
+      const free = st.bavail * st.bsize
+      return {total, free, used: Math.max(0, total - free), usagePct: total ? Math.round(((total - free) / total) * 1000) / 10 : 0}
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * AI 用量。直接读 YingAI/data/usage/_global.json，不 import 该插件代码（解耦，未装即 null）。
+   *
+   * ⚠️ 口径坑：Usage.js 只在「写入时」按 _day 清零，直接读文件拿到的是最后一次写入的快照。
+   * 若 _day 不是今天，说明今天还没有任何模型调用 —— 必须按 0 处理，否则会把昨天的量当今日。
+   */
+  _readAiUsage() {
+    try {
+      const file = path.resolve(process.cwd(), 'plugins/YingAI/data/usage/_global.json')
+      if (!fs.existsSync(file)) return null
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+      const d = new Date()
+      const today = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+      const isToday = String(raw?._day || '') === today
+      const t = raw?.total || {}
+      const byModel = Object.entries(raw?.byModel || {})
+        .map(([model, v]) => ({model, calls: Number(v?.calls) || 0, total: Number(v?.total) || 0}))
+        .sort((a, b) => b.calls - a.calls)
+      return {
+        day: raw?._day ?? null,
+        isToday,
+        calls: isToday ? Number(t.calls) || 0 : 0,
+        prompt: isToday ? Number(t.prompt) || 0 : 0,
+        completion: isToday ? Number(t.completion) || 0 : 0,
+        total: isToday ? Number(t.total) || 0 : 0,
+        byModel: isToday ? byModel : [],
+        rateLimit: {
+          hits: Number(raw?.rateLimit?.hits) || 0,
+          lastAt: Number(raw?.rateLimit?.lastAt) || 0,
+        },
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /** 日志体积与最后写入时间（只 stat，不读内容） */
+  _readLogs() {
+    const out = {errorSize: null, errorMtime: null, todaySize: null}
+    const dir = path.resolve(process.cwd(), 'logs')
+    try {
+      const st = fs.statSync(path.join(dir, 'error.log'))
+      out.errorSize = st.size
+      out.errorMtime = st.mtime.toISOString()
+    } catch {}
+    try {
+      const d = new Date()
+      const p = (n) => String(n).padStart(2, '0')
+      const name = `command.${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.log`
+      out.todaySize = fs.statSync(path.join(dir, name)).size
+    } catch {}
+    return out
   }
 }
