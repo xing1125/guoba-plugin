@@ -56,6 +56,17 @@ export const SystemMenus = {
     },
   },
   // 鸣潮签到已并入 /sign 的页内 tab；waves-js 看板仍可经插件菜单 /plugin/extra/waves-dashboard 访问
+  // 导航管理（菜单显隐 / 排序 · 云崽管理后台扩展）
+  navMgr: {
+    path: '/nav-mgr',
+    name: 'NavMgr',
+    component: '/guoba/system/nav-mgr/index',
+    meta: {
+      perm: 'nav-mgr',
+      title: '导航管理',
+      icon: 'ion:settings-outline',
+    },
+  },
   // 聊天诊断（YingAI 群聊诊断大屏 · 云崽管理后台扩展）
   chatDiag: {
     path: '/chat-diag',

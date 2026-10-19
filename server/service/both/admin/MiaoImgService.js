@@ -54,6 +54,12 @@ export class MiaoImgService extends Service {
         label: '卡面立绘',
         exts: new Set(['.png', '.webp']),
       },
+      // 小清新图库：<角色名>/se/ 子目录（miao 随机图的另一分类）
+      se: {
+        base: path.join(this.miaoRes, 'character-img'),
+        label: '小清新',
+        exts: new Set([...IMG_EXT, GIF_EXT]),
+      },
     }
     this.trashDir = path.resolve(_paths.pluginRoot, '..', '..', 'temp', 'guoba-trash')
   }
@@ -79,7 +85,12 @@ export class MiaoImgService extends Service {
   _charDir(kind, name, create = false) {
     const k = this._kind(kind)
     const n = this._checkName(name)
-    const rel = k === this.kindsMap.character ? path.join(n, 'upload') : n
+    let rel = n
+    if (k === this.kindsMap.character) {
+      rel = path.join(n, 'upload')
+    } else if (k === this.kindsMap.se) {
+      rel = path.join(n, 'se')
+    }
     const dir = path.join(k.base, rel)
     const realBase = fs.existsSync(k.base) ? fs.realpathSync(k.base) : k.base
     const realDir = fs.existsSync(dir) ? fs.realpathSync(dir) : dir
@@ -152,7 +163,7 @@ export class MiaoImgService extends Service {
     return n
   }
 
-  /** 有图的角色清单 */
+  /** 有图的角色清单（三类图库各自独立：面板图 / 立绘根层 / 写真 upload 层） */
   characters(kind) {
     const k = this._kind(kind)
     if (!fs.existsSync(k.base)) {
@@ -164,9 +175,18 @@ export class MiaoImgService extends Service {
         continue
       }
       const dir = path.join(k.base, e.name)
-      // art 只统计根目录层图片（跳过 upload/、se/ 子目录），避免与 character kind 重复计数
-      const skip = kind === 'art' ? new Set(['upload', 'se']) : null
-      const count = this._countImgsDeep(dir, 0, skip)
+      // 目录分家：写真只数 <角色>/upload/ 层；小清新只数 <角色>/se/ 层；立绘只数 <角色>/ 根层
+      // （跳过 upload/、se/）；面板图数自己的目录树。四类列表互不干扰。
+      let count = 0
+      if (kind === 'character') {
+        count = this._imgsIn(path.join(dir, 'upload')).length
+      } else if (kind === 'se') {
+        count = this._imgsIn(path.join(dir, 'se')).length
+      } else if (kind === 'art') {
+        count = this._countImgsDeep(dir, 0, new Set(['upload', 'se']))
+      } else {
+        count = this._countImgsDeep(dir)
+      }
       if (count > 0) {
         out.push({name: e.name, count})
       }

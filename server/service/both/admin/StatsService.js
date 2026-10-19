@@ -102,18 +102,22 @@ export class StatsService extends Service {
   /**
    * 带 TTL 的内存缓存，并对并发请求做去重
    * 首屏会同时请求 overview / groups / trend / games，若各自触发全库 SCAN 会重复扫多遍。
+   *
+   * keep(val)：可选。返回 false 视为「预热期结果」（如 Bot.gl 还没挂上、群列表被过滤成空），
+   * 只缓存 3 秒而不是整个 TTL —— 否则重启后 60 秒内打开的页面会一直看到「暂无群数据」。
    */
-  async _cached(name, ttl, fn) {
+  async _cached(name, ttl, fn, keep = null) {
     const hit = this._cache.get(name)
     const now = Date.now()
     if (hit) {
       if (hit.pending) return hit.pending
-      if (now - hit.at < ttl) return hit.val
+      if (now - hit.at < (hit.ttl ?? ttl)) return hit.val
     }
     const pending = Promise.resolve()
       .then(fn)
       .then((val) => {
-        this._cache.set(name, {at: Date.now(), val})
+        const use = keep && !keep(val) ? Math.min(ttl, 3 * 1000) : ttl
+        this._cache.set(name, {at: Date.now(), val, ttl: use})
         return val
       })
       .catch((e) => {
@@ -368,7 +372,12 @@ export class StatsService extends Service {
         const n = Number(valMap.get(key)) || 0
         if (!n) continue
         const r = ensure(p.gid)
-        if (p.raw && !r.rawGid) r.rawGid = p.raw
+        // 同一 gid 可能有多种键形态（ComWeChat 的 group- 前缀改过版），历史数据散在两把键里，
+        // 只记第一把会看运气：碰上死形态，今日计数就永远读 0。全部记下，读取时逐形态求和。
+        if (p.raw) {
+          if (!r.rawGid) r.rawGid = p.raw
+          ;(r.rawForms ??= new Set()).add(p.raw)
+        }
         r[p.dir] += n
         r.total += n
         r.days += 1
@@ -454,6 +463,8 @@ export class StatsService extends Service {
           gid: r.gid,
           /** Redis 键里的原始群号；重建计数键时用它 */
           rawGid: r.rawGid || r.gid,
+          /** 该 gid 出现过的所有键形态（含历史），getLive 逐形态求和用 */
+          rawGids: r.rawForms && r.rawForms.size ? [...r.rawForms] : [r.rawGid || r.gid],
           name: nameMap.get(r.gid) || '',
           // nameMap 的 key 即运行时在群集合：false = Bot 已不在该群（无群名属正常）
           inGroup: nameMap.has(r.gid),
@@ -478,8 +489,11 @@ export class StatsService extends Service {
       const visible = includeLeft ? groups : groups.filter((g) => nameMap.has(g.gid))
 
       const trend = [...trendMap.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
-      return {available: true, groups: visible, trend, updatedAt: new Date().toISOString()}
-    })
+      // 预热期：Redis 里有计数数据，但 Bot.gl 还没挂上（适配器没连完）→ visible 被过滤成空。
+      // 这种结果按 60s 长缓存的话，重启后打开的页面会一直「暂无群数据」，所以只缓 3 秒。
+      const warming = groups.length > 0 && visible.length === 0
+      return {available: true, groups: visible, trend, warming, updatedAt: new Date().toISOString()}
+    }, (val) => !val?.warming)
   }
 
   /** 群列表（分页 + 关键词 + 排序） */
@@ -1015,15 +1029,18 @@ export class StatsService extends Service {
       groups = []
     }
 
+    // 今日键：同一 gid 的所有键形态都要读（历史形态可能还活着，只读一把会漏）
     const keys = []
-    for (const g of groups) {
-      const raw = g.rawGid || g.gid
-      if (!raw) continue
-      keys.push(`Yz:count:receive:msg:group:${raw}:${day}`)
-      keys.push(`Yz:count:send:msg:group:${raw}:${day}`)
-      keys.push(`Yz:count:receive:msg:group:${raw}:total`)
-      keys.push(`Yz:count:send:msg:group:${raw}:total`)
-    }
+    const owner = []
+    groups.forEach((g, gi) => {
+      const forms = Array.isArray(g.rawGids) && g.rawGids.length ? g.rawGids : [g.rawGid || g.gid]
+      for (const raw of forms) {
+        keys.push(`Yz:count:receive:msg:group:${raw}:${day}`)
+        owner.push(gi)
+        keys.push(`Yz:count:send:msg:group:${raw}:${day}`)
+        owner.push(gi)
+      }
+    })
 
     let valMap = new Map()
     if (keys.length) {
@@ -1034,24 +1051,30 @@ export class StatsService extends Service {
       }
     }
 
+    // ⚠️ 累计口径：不能用 Yz:count:*:msg:group:<gid>:total 这个粒度键 ——
+    // 它和「按日键累加」不是一回事（清空统计工具只清一边时会出现 60 vs 一年历史的荒谬差），
+    // 实测 total 键合计 33.6 万、按日键合计 38.9 万。这里的 totalMsg 直接取群聚合缓存里的
+    // g.total（即 overview 同源口径），代价为零，最多滞后一次缓存轮换（60s）。
     let todayMsg = 0
     let todayRecv = 0
     let todaySend = 0
     let totalMsg = 0
     let activeToday = 0
     const byGroup = {}
-    for (const g of groups) {
-      const raw = g.rawGid || g.gid
-      if (!raw) continue
-      const r = Number(valMap.get(`Yz:count:receive:msg:group:${raw}:${day}`)) || 0
-      const s = Number(valMap.get(`Yz:count:send:msg:group:${raw}:${day}`)) || 0
-      byGroup[g.gid] = r + s
-      todayRecv += r
-      todaySend += s
-      todayMsg += r + s
-      if (r + s > 0) activeToday += 1
-      totalMsg += (Number(valMap.get(`Yz:count:receive:msg:group:${raw}:total`)) || 0) +
-        (Number(valMap.get(`Yz:count:send:msg:group:${raw}:total`)) || 0)
+    const acc = groups.map(() => 0)
+    for (let i = 0; i < keys.length; i++) {
+      const n = Number(valMap.get(keys[i])) || 0
+      if (!n) continue
+      acc[owner[i]] += n
+      todayMsg += n
+      if (i % 2 === 0) todayRecv += n
+      else todaySend += n
+    }
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi]
+      byGroup[g.gid] = acc[gi]
+      if (acc[gi] > 0) activeToday += 1
+      totalMsg += Number(g.total) || 0
     }
 
     let redisKeys = 0

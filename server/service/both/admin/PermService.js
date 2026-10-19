@@ -51,6 +51,7 @@ export const MENU_CATALOGUE = [
   {perm: 'yingai', name: 'AI 私聊'},
   {perm: 'plugins-data', name: '插件数据'},
   {perm: 'sign', name: '签到中心'},
+  {perm: 'nav-mgr', name: '导航管理'},
   {perm: 'chat-diag', name: '聊天诊断'},
   {perm: 'data', name: '数据管理'},
   {perm: 'config', name: '配置管理'},
