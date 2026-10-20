@@ -4,6 +4,10 @@ import path from 'node:path'
 import {YamlReader} from "#guoba.framework"
 import {isTRSS} from '#guoba.adapter'
 import {_paths} from '#guoba.platform'
+/* 云崽核心配置单例：写盘后直接清它的缓存 key，让它下次 get 立刻重读，
+   不必等 chokidar 的 5s 防抖。Cfg 是匿名类实例，config 是普通对象，删 key 即可，
+   不改云崽本体（更新时不产生冲突）。 */
+import coreCfg from '../../../../../../lib/config/config.js'
 
 // 创建可使用相对路径的import方法
 const {GI, GID} = Guoba.createImport(import.meta.url)
@@ -42,12 +46,84 @@ export default class ConfigServiceImpl extends IConfigService {
     const reader = getConfigReader(key, configFile)
     this.backupConfigFile(key, reader)
     reader.setData(data)
+    return this.applyHot(key, data)
   }
 
   async removeCardForm(formKey, cardKey) {
     const reader = getConfigReader(cardKey, configFile)
     this.backupConfigFile(cardKey, reader)
     reader.deleteKey(formKey)
+    return this.applyHot(cardKey, null)
+  }
+
+  /* ------------------------------ 热生效 ------------------------------ */
+
+  /** 整份配置都不能热的（key → 原因） */
+  static NO_HOT = {
+    'system.redis': 'Redis 连接池已按旧参数建立，需重启后重建连接',
+    'system.server': '端口/证书在启动时绑定，需重启后重新监听',
+    'system.qq': '账号信息在适配器握手时确定，需重启后重连',
+  }
+
+  /** 个别字段不能热的（key → 字段名列表） */
+  static NO_HOT_FIELDS = {
+    'system.bot': {
+      chromium_path: '浏览器路径在渲染器启动时读取',
+      puppeteer_ws: '远程浏览器连接在渲染器启动时建立',
+    },
+  }
+
+  /** 判断本次保存能否立刻生效 */
+  checkHot(key, data) {
+    if (ConfigServiceImpl.NO_HOT[key]) {
+      return {hot: false, reason: ConfigServiceImpl.NO_HOT[key]}
+    }
+    const fields = ConfigServiceImpl.NO_HOT_FIELDS[key]
+    if (fields && data && typeof data === 'object') {
+      for (const [field, reason] of Object.entries(fields)) {
+        if (Object.prototype.hasOwnProperty.call(data, field)) return {hot: false, reason}
+      }
+    }
+    return {hot: true, reason: ''}
+  }
+
+  /**
+   * 让运行中的实例立刻看到新配置
+   * - 核心配置：清 Cfg 的缓存 key + 触发 change_xxx（如 change_bot 重新 init 日志）
+   * - 插件配置：同步广播 guoba.config.change，订阅者当场清自己的缓存
+   */
+  applyHot(key, data) {
+    const {hot, reason} = this.checkHot(key, data)
+    const file = configFile[key] || ''
+    const name = String(key || '').split('.').pop()
+    const result = {hot, reason, key, file}
+
+    /* 核心配置：即便最终判定需重启，也先把缓存清掉 —— 下次读到的至少是磁盘上的新值 */
+    if (!file.startsWith('/plugins/')) {
+      try {
+        delete coreCfg.config[`config.${name}`]
+        const hook = coreCfg[`change_${name}`]
+        if (typeof hook === 'function') hook.call(coreCfg)
+        result.coreReloaded = true
+      } catch (e) {
+        result.coreReloaded = false
+        globalThis.logger?.warn?.(`[Guoba] 核心配置热重载失败（${key}）：${e.message}`)
+      }
+    }
+
+    /* 同步广播：Bot.em 是同步 emit，订阅者在这条 HTTP 返回前就完成失效 */
+    try {
+      const bot = globalThis.Bot
+      if (bot && typeof bot.em === 'function') {
+        bot.em('guoba.config.change', {key, file, name, hot, ts: Date.now()})
+        result.broadcast = true
+      }
+    } catch (e) {
+      globalThis.logger?.warn?.(`[Guoba] 配置变更广播失败（${key}）：${e.message}`)
+    }
+
+    globalThis.logger?.mark?.(`[Guoba] 配置已${hot ? '热更新' : '写入（需重启）'}：${key}`)
+    return result
   }
 
   /** 每份备份保留数量 */

@@ -46,9 +46,9 @@ export default class ConfigController extends ApiController {
 
   async setData(req) {
     let {key, data} = req.body
-    await this.configService.setConfigData(key, data)
-    this._audit(req, 'config.save', key)
-    return Result.ok('保存成功~')
+    let res = await this.configService.setConfigData(key, data)
+    this._audit(req, 'config.save', key, res?.hot === false ? `需重启：${res.reason}` : '已热更新')
+    return Result.ok({message: '保存成功~', ...(res || {})})
   }
 
   async removeCardForm(req) {

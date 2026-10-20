@@ -157,9 +157,38 @@ export default class PluginController extends ApiController {
     this._audit(req, 'plugin.config', pluginName, {keys: Object.keys(req.body || {}).slice(0, 20)})
     let flag = await setConfigData(req.body, {Result})
     if (flag instanceof Result) {
+      /* 插件自己报错时不做广播，避免把运行中的实例改坏 */
+      if (flag.ok !== false) this._afterPluginSave(pluginName, configInfo)
       return flag
     }
+    this._afterPluginSave(pluginName, configInfo)
     return Result.ok(flag)
+  }
+
+  /**
+   * 插件配置保存后的收尾：广播变更，让用 Bot.on('guoba.config.change') 的插件当场失效缓存。
+   * 插件可以在 configInfo 里声明 hotReload：
+   *   hotReload: true            → 保存后已即时生效
+   *   hotReload: false           → 明确需要重启
+   *   不声明（undefined/null）    → 视为未知，前端提示「如未生效请重启」
+   */
+  _afterPluginSave(pluginName, configInfo) {
+    const hot = configInfo?.hotReload
+    try {
+      const bot = globalThis.Bot
+      if (bot && typeof bot.em === 'function') {
+        bot.em('guoba.config.change', {
+          key: `plugin.${pluginName}`,
+          plugin: pluginName,
+          file: configInfo?.configFile || '',
+          hot: hot !== false,
+          ts: Date.now(),
+        })
+        globalThis.logger?.mark?.(`[Guoba] 插件配置已更新：${pluginName}${hot === true ? '（已热生效）' : hot === false ? '（需重启）' : ''}`)
+      }
+    } catch (e) {
+      globalThis.logger?.warn?.(`[Guoba] 插件配置广播失败（${pluginName}）：${e.message}`)
+    }
   }
 
   // 执行插件的 action
