@@ -53,6 +53,8 @@ export const MENU_CATALOGUE = [
   {perm: 'sign', name: '签到中心'},
   {perm: 'nav-mgr', name: '导航管理'},
   {perm: 'chat-diag', name: '聊天诊断'},
+  {perm: 'console', name: '控制台'},
+  {perm: 'db-health', name: '数据健康'},
   {perm: 'data', name: '数据管理'},
   {perm: 'config', name: '配置管理'},
   {perm: 'account', name: '账号管理'},

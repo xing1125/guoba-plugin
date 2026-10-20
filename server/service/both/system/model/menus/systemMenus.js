@@ -78,6 +78,28 @@ export const SystemMenus = {
       icon: 'gm:pulse',
     },
   },
+  // 控制台（发消息 / 模拟指令 · 云崽管理后台扩展）
+  console: {
+    path: '/console',
+    name: 'Console',
+    component: '/guoba/system/console/index',
+    meta: {
+      perm: 'console',
+      title: '控制台',
+      icon: 'gm:console',
+    },
+  },
+  // 数据健康（备份 / 完整性 · 云崽管理后台扩展）
+  dbHealth: {
+    path: '/db-health',
+    name: 'DbHealth',
+    component: '/guoba/system/dbhealth/index',
+    meta: {
+      perm: 'db-health',
+      title: '数据健康',
+      icon: 'gm:shield',
+    },
+  },
   // 数据总览（云崽管理后台扩展）
   dashboard: {
     path: '/dashboard',

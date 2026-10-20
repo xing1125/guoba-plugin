@@ -16,6 +16,8 @@ function menuKey(m) {
 /** 全量菜单（未应用显隐/排序偏好），导航管理页用这份 */
 export async function useAllMenus() {
   const menus = []
+  // 控制台放第一项：日常运维最常用（发消息 / 模拟指令）
+  menus.push(SystemMenus.console)
   menus.push(SystemMenus.home)
   menus.push(SystemMenus.dashboard)
   menus.push(SystemMenus.screen)
@@ -26,6 +28,7 @@ export async function useAllMenus() {
   menus.push(SystemMenus.usersData)
   menus.push(SystemMenus.yingai)
   menus.push(SystemMenus.chatDiag)
+  menus.push(SystemMenus.dbHealth)
   menus.push(SystemMenus.pluginsData)
   menus.push(SystemMenus.sign)
   menus.push(SystemMenus.navMgr)
