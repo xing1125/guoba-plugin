@@ -158,6 +158,17 @@ export class DbService extends Service {
       );
       CREATE INDEX IF NOT EXISTS idx_deleted_ltuid ON deleted_account(ltuid);
 
+      /* 删除「无绑定用户」前的整行备份（Users 表），用于误删恢复 */
+      CREATE TABLE IF NOT EXISTS deleted_user (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        uid        TEXT NOT NULL,
+        payload    TEXT NOT NULL,
+        actor      TEXT,
+        ip         TEXT,
+        deleted_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_deleted_user_uid ON deleted_user(uid);
+
       /* 昵称快照：Users.name 全为空，昵称只在 Bot 运行时内存里，
          由 StatsService 周期回写，保证后台随时可查、重启不丢 */
       CREATE TABLE IF NOT EXISTS user_name (
@@ -302,6 +313,32 @@ export class DbService extends Service {
   /** 取某条删除备份 */
   getDeletedAccount(id) {
     const row = this.getAdminDb().prepare('SELECT * FROM deleted_account WHERE id = ?').get(Number(id))
+    if (!row) {
+      return null
+    }
+    try {
+      row.payload = JSON.parse(row.payload)
+    } catch {}
+    return row
+  }
+
+  /** 备份被清理的「无效用户」（Users 整行 + 相关线索） */
+  backupDeletedUser(uid, payload, {actor = '', ip = ''} = {}) {
+    this.getAdminDb()
+      .prepare('INSERT INTO deleted_user (uid, payload, actor, ip, deleted_at) VALUES (?, ?, ?, ?, ?)')
+      .run(String(uid), JSON.stringify(payload), actor, ip, new Date().toISOString())
+  }
+
+  /** 被清理用户的备份列表 */
+  listDeletedUsers({limit = 100} = {}) {
+    return this.getAdminDb()
+      .prepare('SELECT id, uid, actor, deleted_at FROM deleted_user ORDER BY id DESC LIMIT ?')
+      .all(Math.min(500, Math.max(1, Number(limit) || 100)))
+  }
+
+  /** 取某条用户删除备份 */
+  getDeletedUser(id) {
+    const row = this.getAdminDb().prepare('SELECT * FROM deleted_user WHERE id = ?').get(Number(id))
     if (!row) {
       return null
     }

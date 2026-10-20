@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import {Service} from '#guoba.framework'
+import {autowired, Service} from '#guoba.framework'
 import {_paths} from '#guoba.platform'
 
 /**
@@ -139,7 +139,27 @@ function dateOf(iso) {
   return String(iso || '').slice(0, 10)
 }
 
+/** 宽松解析 MysUsers.uids（不限定游戏 key，脏数据返回空对象而不是抛错） */
+function parseUidsLoose(json) {
+  try {
+    const obj = JSON.parse(json || '{}')
+    const out = {}
+    for (const [k, v] of Object.entries(obj || {})) {
+      if (k === '_meta') continue
+      if (Array.isArray(v)) out[k] = v.filter(Boolean).map(String)
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+
 export class SignService extends Service {
+
+  dbService = autowired('dbService')
+
+  adminService = autowired('adminService')
 
   constructor(app) {
     super(app)
@@ -437,19 +457,53 @@ export class SignService extends Service {
     return {total, page: p, size: s, list: rows}
   }
 
-  /** 某一天的完整聚合（含游戏明细 + 用户列表） */
+  /** 某一天的完整聚合（含游戏明细 + 账号列表）
+   *
+   * 账号粒度 = (qq, profileId)：一个微信号可以绑多个米游社账号（profileId 1/2/3…），
+   * 它们的成功数、连续天数、米游币必须各算各的，不能合并成一行。
+   */
   getDay(date) {
     const {records} = this._load()
     const d = String(date || '').slice(0, 10)
     const list = d ? records.filter((r) => r.date === d) : []
     if (list.length === 0) {
-      return {date: d, available: false, list: []}
+      return {date: d, available: false, list: [], userList: [], accountList: [], failList: []}
     }
     const agg = this._aggDay(list)
-    const userMap = new Map()
+
+    const labelOf = (key) => GAMES.find((g) => g.key === key)?.label || key
+    const nameMap = (() => {
+      try {
+        const m = this.adminService?._nameMap?.()
+        return m instanceof Map ? m : new Map()
+      } catch {
+        return new Map()
+      }
+    })()
+    const accountMap = new Map()
+
     for (const r of list) {
-      const prev = userMap.get(r.qq) || {qq: r.qq, count: 0, ok: 0, fail: 0, days: 0, coins: null, games: {}}
+      const key = `${r.qq}|${r.profileId}`
+      const prev = accountMap.get(key) || {
+        qq: r.qq,
+        profileId: r.profileId,
+        accountNo: r.profileId,
+        count: 0,
+        ok: 0,
+        fail: 0,
+        days: 0,
+        coins: null,
+        games: {},
+        signedGames: [],
+        unboundGames: [],
+        failedGames: [],
+        failReasons: [],
+        firstAt: r.time,
+        lastAt: r.time,
+      }
       prev.count += 1
+      if (r.time < prev.firstAt) prev.firstAt = r.time
+      if (r.time > prev.lastAt) prev.lastAt = r.time
       if (r.ok) {
         prev.ok += 1
       } else {
@@ -458,22 +512,317 @@ export class SignService extends Service {
       if (r.coins?.current != null) {
         prev.coins = r.coins.current
       }
+
+      let hasFailedGame = false
       for (const g of r.games) {
         if (g.status === 'signed') {
           prev.games[g.key] = g.days || 0
           if ((g.days || 0) > prev.days) {
             prev.days = g.days || 0
           }
+          if (!prev.signedGames.includes(g.key)) {
+            prev.signedGames.push(g.key)
+          }
+        } else if (g.status === 'failed') {
+          hasFailedGame = true
+          if (!prev.failedGames.includes(g.key)) {
+            prev.failedGames.push(g.key)
+          }
+          prev.failReasons.push({
+            game: g.key,
+            label: labelOf(g.key),
+            kind: 'failed',
+            reason: g.text || '签到失败',
+          })
+        } else if (g.status === 'unbound') {
+          if (!prev.unboundGames.includes(g.key)) {
+            prev.unboundGames.push(g.key)
+          }
+          prev.failReasons.push({
+            game: g.key,
+            label: labelOf(g.key),
+            kind: 'unbound',
+            reason: g.text || '并没有绑定该游戏账号',
+          })
         }
       }
-      userMap.set(r.qq, prev)
+
+      // 整轮失败但没有任何游戏段落说明原因时，用 stage / message 兜底
+      if (!r.ok && !hasFailedGame) {
+        const brief = String(r.message || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+        prev.failReasons.push({
+          game: '',
+          label: r.stage || '整轮',
+          kind: 'record',
+          reason: brief || (r.stage ? `执行中断于 ${r.stage}` : '未返回具体原因'),
+        })
+      }
+
+      accountMap.set(key, prev)
     }
+
+    const accountList = [...accountMap.values()]
+      .map((a) => ({
+        ...a,
+        name: String(nameMap.get(String(a.qq)) || ''),
+        allOk: a.fail === 0,
+        // 去重同一条原因（同一游戏多次失败只留一条）
+        failReasons: a.failReasons.filter(
+          (x, i, arr) => arr.findIndex((y) => y.game === x.game && y.kind === x.kind && y.reason === x.reason) === i,
+        ),
+        signedLabels: a.signedGames.map(labelOf),
+        unboundLabels: a.unboundGames.map(labelOf),
+        failedLabels: a.failedGames.map(labelOf),
+      }))
+      .sort((a, b) => b.fail - a.fail || a.qq.localeCompare(b.qq) || a.profileId - b.profileId)
+
+    // 兼容旧前端：按微信号再聚合一层（不参与新展示）
+    const userMap = new Map()
+    for (const a of accountList) {
+      const prev = userMap.get(a.qq) || {qq: a.qq, name: a.name, count: 0, ok: 0, fail: 0, days: 0, coins: null, games: {}, accounts: 0, accountNos: []}
+      prev.count += a.count
+      prev.ok += a.ok
+      prev.fail += a.fail
+      prev.accounts += 1
+      prev.accountNos.push(a.profileId)
+      prev.days = Math.max(prev.days, a.days)
+      if (a.coins != null) prev.coins = a.coins
+      Object.assign(prev.games, a.games)
+      userMap.set(a.qq, prev)
+    }
+
+    // 「失败」只算真正签到失败（fail > 0）；单纯「没绑某游戏」不算失败，但计入 reasonAccounts
+    const failedAccounts = accountList.filter((a) => a.fail > 0)
+    const failList = failedAccounts.map((a) => ({
+      qq: a.qq,
+      name: a.name,
+      profileId: a.profileId,
+      accountNo: a.accountNo,
+      lastAt: a.lastAt,
+      fail: a.fail,
+      failReasons: a.failReasons,
+    }))
+
     return {
       date: d,
       available: true,
       ...agg,
       rate: agg.total ? Math.round((agg.ok / agg.total) * 1000) / 10 : 0,
+      accountList,
       userList: [...userMap.values()].sort((a, b) => b.ok - a.ok || b.days - a.days),
+      failList,
+      failAccounts: failedAccounts.length,
+      reasonAccounts: accountList.filter((a) => a.failReasons.length > 0).length,
+      multiAccountUsers: [...userMap.values()].filter((u) => u.accounts > 1).length,
     }
   }
+
+  /* ------------------------------ 异常账号清单 ------------------------------ */
+
+  /**
+   * 体检：CK 失效账号 / 无绑定（或悬空绑定）用户 / 近 N 天持续失败账号
+   *
+   * 只读，不修改任何数据；返回结构给前端勾选后调 cleanIssues。
+   * @param {{days?:number, limit?:number}} opts
+   */
+  getIssues({days = 7, limit = 300} = {}) {
+    const span = Math.max(1, Math.min(60, Number(days) || 7))
+    const cap = Math.max(20, Math.min(1000, Number(limit) || 300))
+    const result = {
+      generatedAt: new Date().toISOString(),
+      days: span,
+      expired: [],
+      orphan: [],
+      stale: [],
+      counts: {expired: 0, orphan: 0, stale: 0},
+    }
+
+    const admin = (() => {
+      try {
+        return this.dbService.getAdminDb()
+      } catch {
+        return null
+      }
+    })()
+    const bot = (() => {
+      try {
+        return this.dbService.getBotDb()
+      } catch {
+        return null
+      }
+    })()
+
+    const nameMap = (() => {
+      try {
+        const map = this.adminService?._nameMap?.()
+        return map instanceof Map ? map : new Map()
+      } catch {
+        return new Map()
+      }
+    })()
+    const bindMap = (() => {
+      try {
+        return this.adminService?._bindMap?.() || new Map()
+      } catch {
+        return new Map()
+      }
+    })()
+
+    const mysRows = []
+    if (bot) {
+      try {
+        mysRows.push(...bot.prepare('SELECT ltuid, uids, ck FROM MysUsers').all())
+      } catch {
+        /* 主库不可读时降级 */
+      }
+    }
+    const mysMap = new Map(mysRows.map((r) => [Number(r.ltuid), r]))
+
+    /* ---- 1. CK 失效账号 ---- */
+    if (admin) {
+      try {
+        const rows = admin
+          .prepare("SELECT ltuid, ck_status, checked_at FROM account_status WHERE ck_status = 'expired' ORDER BY checked_at DESC")
+          .all()
+        for (const row of rows) {
+          const ltuid = Number(row.ltuid)
+          const mys = mysMap.get(ltuid)
+          const uids = mys ? parseUidsLoose(mys.uids) : {}
+          const bindIds = bindMap.get(ltuid) || []
+          result.expired.push({
+            ltuid,
+            checkedAt: row.checked_at || null,
+            uidCount: Object.values(uids).reduce((n, arr) => n + (arr?.length || 0), 0),
+            games: Object.entries(uids)
+              .filter(([, arr]) => arr?.length)
+              .map(([k, arr]) => `${GAMES.find((g) => g.key === k)?.label || k}×${arr.length}`),
+            bindIds,
+            bindNames: bindIds.map((id) => nameMap.get(id) || ''),
+            exists: !!mys,
+          })
+        }
+      } catch (e) {
+        globalThis.logger?.warn?.(`[sign] 读取 CK 状态失败：${e.message}`)
+      }
+    }
+
+    /* ---- 2. 无绑定 / 悬空绑定用户 ---- */
+    if (bot) {
+      try {
+        const users = bot.prepare('SELECT id, name, ltuids FROM Users').all()
+        for (const u of users) {
+          const raw = String(u.ltuids || '').trim()
+          const ids = raw
+            ? raw
+                .split(',')
+                .map((x) => Number(String(x).trim()))
+                .filter(Boolean)
+            : []
+          const missing = ids.filter((id) => !mysMap.has(id))
+          if (ids.length === 0) {
+            result.orphan.push({
+              id: String(u.id),
+              name: String(u.name || ''),
+              kind: 'empty',
+              ltuids: [],
+              dangling: [],
+              reason: '没有任何绑定账号',
+            })
+          } else if (missing.length === ids.length) {
+            result.orphan.push({
+              id: String(u.id),
+              name: String(u.name || ''),
+              kind: 'dangling',
+              ltuids: ids,
+              dangling: missing,
+              reason: `绑定的 ${missing.length} 个账号都已不存在`,
+            })
+          } else if (missing.length > 0) {
+            result.orphan.push({
+              id: String(u.id),
+              name: String(u.name || ''),
+              kind: 'partial',
+              ltuids: ids,
+              dangling: missing,
+              reason: `有 ${missing.length} 个绑定已失效（保留 ${ids.length - missing.length} 个有效）`,
+            })
+          }
+        }
+      } catch (e) {
+        globalThis.logger?.warn?.(`[sign] 读取用户绑定失败：${e.message}`)
+      }
+    }
+
+    /* ---- 3. 近 N 天持续失败账号（只列不建议自动删） ---- */
+    try {
+      const {records} = this._load()
+      if (records.length) {
+        const dates = [...new Set(records.map((r) => r.date))].sort()
+        const tail = dates.slice(-span)
+        const cutoff = tail[0] || ''
+        const byAccount = new Map()
+        for (const r of records) {
+          if (r.date < cutoff) continue
+          const key = `${r.qq}|${r.profileId}`
+          const prev = byAccount.get(key) || {
+            qq: r.qq,
+            profileId: r.profileId,
+            total: 0,
+            ok: 0,
+            fail: 0,
+            lastAt: r.time,
+            lastOk: false,
+            lastReasons: [],
+          }
+          prev.total += 1
+          if (r.ok) prev.ok += 1
+          else prev.fail += 1
+          if (r.time >= prev.lastAt) {
+            prev.lastAt = r.time
+            prev.lastOk = r.ok
+            prev.lastReasons = r.games
+              .filter((g) => g.status === 'failed' || g.status === 'unbound')
+              .map((g) => `${GAMES.find((x) => x.key === g.key)?.label || g.key}：${g.text || (g.status === 'unbound' ? '未绑定' : '签到失败')}`)
+            if (!prev.lastReasons.length && !r.ok) {
+              prev.lastReasons = [String(r.message || '').replace(/\s+/g, ' ').slice(0, 120) || '未返回原因']
+            }
+          }
+          byAccount.set(key, prev)
+        }
+        for (const a of byAccount.values()) {
+          if (a.fail === 0) continue
+          result.stale.push({
+            qq: a.qq,
+            profileId: a.profileId,
+            days: tail.length,
+            total: a.total,
+            ok: a.ok,
+            fail: a.fail,
+            allFail: a.ok === 0,
+            lastAt: a.lastAt,
+            lastOk: a.lastOk,
+            reasons: a.lastReasons,
+            name: String(nameMap.get(String(a.qq)) || ''),
+          })
+        }
+        result.stale.sort((a, b) => Number(b.allFail) - Number(a.allFail) || b.fail - a.fail || b.lastAt.localeCompare(a.lastAt))
+        result.stale = result.stale.slice(0, cap)
+      }
+    } catch (e) {
+      globalThis.logger?.warn?.(`[sign] 统计失败账号出错：${e.message}`)
+    }
+
+    result.expired = result.expired.slice(0, cap)
+    result.orphan = result.orphan.slice(0, cap)
+    result.counts = {
+      expired: result.expired.length,
+      orphan: result.orphan.length,
+      stale: result.stale.length,
+      orphanEmpty: result.orphan.filter((o) => o.kind === 'empty').length,
+      orphanDangling: result.orphan.filter((o) => o.kind !== 'empty').length,
+      staleAllFail: result.stale.filter((o) => o.allFail).length,
+    }
+    return result
+  }
+
 }

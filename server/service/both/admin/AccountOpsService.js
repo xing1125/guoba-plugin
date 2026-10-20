@@ -215,6 +215,114 @@ export class AccountOpsService extends Service {
     return {...res, scanned: ids.length}
   }
 
+  /**
+   * 清理「无效用户」（Users 表里的微信号）
+   *
+   * 只删 Users 行 + 它自己的 UserGames 行，**不动 MysUsers**（米游社账号是共享资源，
+   * 可能还被别的微信号绑着）。删前整行备份到 admin.db 的 deleted_user。
+   *
+   * @param {string[]} userIds Users.id（wxid / xml 号）
+   * @param {{actor?:string, ip?:string}} ctx
+   */
+  deleteOrphanUsers(userIds, ctx = {}) {
+    const ids = [...new Set((userIds || []).map((x) => String(x || '').trim()).filter(Boolean))]
+    if (ids.length === 0) {
+      return {deleted: 0, failed: [], detail: []}
+    }
+    const write = this.dbService.getBotDbWrite()
+    const detail = []
+    const failed = []
+    let deleted = 0
+
+    const selUser = write.prepare('SELECT * FROM Users WHERE id = ?')
+    const selGames = write.prepare('SELECT * FROM UserGames WHERE userId = ?')
+    const delUser = write.prepare('DELETE FROM Users WHERE id = ?')
+    const delGames = write.prepare('DELETE FROM UserGames WHERE userId = ?')
+
+    for (const uid of ids) {
+      let row
+      try {
+        row = selUser.get(uid)
+      } catch (e) {
+        failed.push({uid, error: e.message})
+        continue
+      }
+      if (!row) {
+        failed.push({uid, error: '用户不存在'})
+        continue
+      }
+
+      try {
+        const games = selGames.all(uid)
+        // 1) 先备份（admin.db 独立文件）
+        this.dbService.backupDeletedUser(uid, {user: row, userGames: games}, ctx)
+
+        // 2) 主库事务
+        const tx = write.transaction(() => {
+          delGames.run(uid)
+          delUser.run(uid)
+        })
+        tx()
+
+        // 3) 后台侧的昵称缓存一并清掉，避免列表里留幽灵
+        try {
+          this.dbService.getAdminDb().prepare('DELETE FROM user_name WHERE uid = ?').run(uid)
+        } catch {}
+
+        deleted += 1
+        detail.push({uid, name: row.name || '', ltuids: this._parseLtuids(row.ltuids), games: games.length})
+      } catch (e) {
+        failed.push({uid, error: e.message})
+      }
+    }
+
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'user.deleteOrphan',
+      target: ids.join(','),
+      detail: {deleted, failed: failed.length, detail},
+    })
+    return {deleted, failed, detail}
+  }
+
+  /** 从用户删除备份恢复 */
+  restoreUser(id, ctx = {}) {
+    const row = this.dbService.getDeletedUser(id)
+    if (!row) {
+      throw new Error('备份记录不存在')
+    }
+    const payload = row.payload || {}
+    const user = payload.user
+    if (!user) {
+      throw new Error('备份数据不完整')
+    }
+    const write = this.dbService.getBotDbWrite()
+    if (write.prepare('SELECT id FROM Users WHERE id = ?').get(user.id)) {
+      throw new Error(`用户 ${user.id} 已存在，无需恢复`)
+    }
+    const cols = Object.keys(user)
+    write.prepare(`INSERT INTO Users (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
+      .run(...cols.map((c) => user[c]))
+
+    let games = 0
+    for (const g of payload.userGames || []) {
+      const gc = Object.keys(g)
+      try {
+        write.prepare(`INSERT INTO UserGames (${gc.join(',')}) VALUES (${gc.map(() => '?').join(',')})`)
+          .run(...gc.map((c) => g[c]))
+        games += 1
+      } catch {}
+    }
+
+    this.dbService.writeAudit({
+      ...ctx,
+      action: 'user.restore',
+      target: String(user.id),
+      detail: {backupId: id, games},
+    })
+    return {uid: user.id, restored: true, games}
+  }
+
   /** 从删除备份恢复账号 */
   restoreAccount(id, ctx = {}) {
     const row = this.dbService.getDeletedAccount(id)

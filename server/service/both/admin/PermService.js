@@ -71,6 +71,7 @@ const SCOPE_RULES = [
   {re: /^\/api\/admin\/accounts/, scope: 'account'},
   {re: /^\/api\/admin\/uids/, scope: 'account'},
   {re: /^\/api\/admin\/groups/, scope: 'group'},
+  {re: /^\/api\/admin\/sign/, scope: 'account'},
   {re: /^\/api\/admin\/(data|files|redis)/, scope: 'data'},
   {re: /^\/api\/admin/, scope: 'data'},
   {re: /^\/api\/plugin/, scope: 'plugin'},
@@ -91,6 +92,7 @@ const SELF_WRITE_WHITELIST = [
  */
 const OP_OVERRIDES = [
   {re: /^\/api\/admin\/accounts\/(delete|delete-expired|restore)/, op: 'account:delete'},
+  {re: /^\/api\/admin\/sign\/(issues\/clean|users\/delete)/, op: 'account:delete'},
   {re: /^\/api\/admin\/groups\/(batch-clear|quit)/, op: 'group:delete'},
   {re: /^\/api\/admin\/data\/(key\/delete|keys\/delete-prefix)/, op: 'data:delete'},
   {re: /^\/api\/admin\/logs\/clear/, op: 'log:delete'},
