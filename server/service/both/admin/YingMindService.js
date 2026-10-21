@@ -178,6 +178,94 @@ export class YingMindService extends Service {
       updatedAt: Number(d?.updatedAt) || 0,
     }
   }
+
+  /* ---------------------------------------------------------------- 干预（写操作） */
+
+  /**
+   * 原子写 JSON：tmp + rename，YingAI 整文件重写时最坏只丢一次我们的小改动，
+   * 不会留半截文件。调用前先重读最新内容，把竞态窗口压到毫秒级。
+   */
+  _writeJson(file, data) {
+    const tmp = file + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8')
+    fs.renameSync(tmp, file)
+  }
+
+  _memoryFile(gid) {
+    const g = this._norm(gid)
+    if (this._isProbeGid(g)) throw new Error('不存在的记忆文件')
+    const disk = this._diskName(g, 'memory')
+    const file = path.join(this.dataDir, 'memory', `${disk}.json`)
+    if (!fs.existsSync(file)) throw new Error('这个群还没有记忆文件')
+    return file
+  }
+
+  /**
+   * 删除一条记忆。oldText 用于校验列表没有漂移（YingAI 会在后台增删记忆）。
+   */
+  async deleteMemory(gid, index, oldText = '') {
+    const file = this._memoryFile(gid)
+    const d = this._readJson(file)
+    if (!d || !Array.isArray(d.memories)) throw new Error('记忆文件结构异常')
+    const i = Number(index)
+    if (!Number.isInteger(i) || i < 0 || i >= d.memories.length) throw new Error('记忆序号越界，请刷新后重试')
+    if (oldText && String(d.memories[i]?.text || '').slice(0, 60) !== String(oldText).slice(0, 60)) {
+      throw new Error('记忆列表已发生变化，请刷新后重试')
+    }
+    const [removed] = d.memories.splice(i, 1)
+    this._writeJson(file, d)
+    logger?.mark?.(`[YingMind] 已删除记忆 ${this._norm(gid)}#${i}: ${String(removed?.text || '').slice(0, 30)}...`)
+    return { text: String(removed?.text || ''), remaining: d.memories.length }
+  }
+
+  /**
+   * 编辑记忆（文本 / 重要度 0~1）。oldText 同样做漂移校验。
+   */
+  async updateMemory(gid, index, patch = {}, oldText = '') {
+    const file = this._memoryFile(gid)
+    const d = this._readJson(file)
+    if (!d || !Array.isArray(d.memories)) throw new Error('记忆文件结构异常')
+    const i = Number(index)
+    if (!Number.isInteger(i) || i < 0 || i >= d.memories.length) throw new Error('记忆序号越界，请刷新后重试')
+    if (oldText && String(d.memories[i]?.text || '').slice(0, 60) !== String(oldText).slice(0, 60)) {
+      throw new Error('记忆列表已发生变化，请刷新后重试')
+    }
+    const m = d.memories[i]
+    if (typeof patch.text === 'string' && patch.text.trim()) {
+      m.text = patch.text.trim()
+    }
+    if (patch.value !== undefined && patch.value !== null && patch.value !== '') {
+      const v = Number(patch.value)
+      if (!Number.isFinite(v) || v < 0 || v > 100) throw new Error('重要度需在 0~100 之间')
+      m.value = v / 100
+    }
+    this._writeJson(file, d)
+    logger?.mark?.(`[YingMind] 已编辑记忆 ${this._norm(gid)}#${i}`)
+    return { text: m.text, value: m.value }
+  }
+
+  /**
+   * 手动校正情绪（mood 文案 / value 0~100）。
+   */
+  async setEmotion(gid, {mood, value} = {}) {
+    const g = this._norm(gid)
+    if (this._isProbeGid(g)) throw new Error('不存在的情绪文件')
+    const disk = this._diskName(g, 'emotion')
+    const file = path.join(this.dataDir, 'emotion', `${disk}.json`)
+    let d = this._readJson(file) || {}
+    if (mood !== undefined && mood !== null && mood !== '') {
+      d.mood = String(mood).trim().slice(0, 12)
+    }
+    if (value !== undefined && value !== null && value !== '') {
+      const v = Number(value)
+      if (!Number.isFinite(v) || v < 0 || v > 100) throw new Error('情绪值需在 0~100 之间')
+      d.value = v
+    }
+    d.updatedAt = Date.now()
+    this._writeJson(file, d)
+    logger?.mark?.(`[YingMind] 已校正情绪 ${g}: ${d.mood} ${d.value}`)
+    return { mood: d.mood, value: d.value }
+  }
 }
 
 export default YingMindService

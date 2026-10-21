@@ -1,3 +1,12 @@
+# 2.4.8
+
+荧之心智升级：记忆/情绪干预（写操作）。
+
+* `YingMindService` 新增 `deleteMemory` / `updateMemory` / `setEmotion`：读-改-原子写（tmp+rename），oldText 前 60 字漂移校验防 YingAI 并发增删导致错位
+* `YingMindController` 新增 POST memories/delete、memories/update、emotion/set：confirm 二次确认 + 限流 10/min + writeAudit（yingmind.memory.delete / update / yingmind.emotion.set）
+* **需重启 Bot 生效**
+
+
 # 2.4.7
 
 新模块「告警中心」：签到/插件/系统三源告警聚合。
