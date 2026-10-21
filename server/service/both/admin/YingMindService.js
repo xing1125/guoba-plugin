@@ -70,6 +70,28 @@ export class YingMindService extends Service {
     return g
   }
 
+  /** 数值清洗：非有限值回落默认值，再夹到 [min, max] */
+  _num(v, def, min, max) {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return def
+    return Math.min(max, Math.max(min, n))
+  }
+
+  /** 备份目录时间戳：YYYYMMDD_HHmmss */
+  _stamp(d = new Date()) {
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  }
+
+  /** 重复检测指纹：去空白与常见标点、转小写，取前 40 字 */
+  _fingerprint(text) {
+    return String(text || '')
+      .replace(/\s+/g, '')
+      .replace(/[，。、；：！？…—～·,.;:!?()\[\]{}<>《》【】（）「」“”"'`~@#$%^&*_+=|\\/-]/g, '')
+      .toLowerCase()
+      .slice(0, 40)
+  }
+
   /** 群名：群名无持久化，唯一来源是运行时 Bot[uin].gl */
   _groupName(gid) {
     const raw = String(gid || '')
@@ -179,6 +201,139 @@ export class YingMindService extends Service {
     }
   }
 
+  /**
+   * 记忆体检（只读）：扫出低价值 / 陈旧 / 未巩固 / 跨群重复的候选清理条目。
+   *
+   * 探针/测试文件只统计条数（probeFiles），既不进 candidates 也不参与清理。
+   * candidates.index 是该群 memories 数组的原始下标，清理接口直接拿它删，所以先记下标再排序。
+   */
+  health(gid = '', opts = {}) {
+    const now = Date.now()
+    const staleDays = this._num(opts?.staleDays, 45, 1, 3650)
+    const lowValue = this._num(opts?.lowValue, 0.35, 0, 1)
+    const minAge = this._num(opts?.minAge, 7, 0, 3650)
+    const staleMs = staleDays * 86400000
+    const minAgeMs = minAge * 86400000
+
+    const normGid = this._norm(gid)
+    const scope = normGid ? 'group' : 'all'
+    const memDir = path.join(this.dataDir, 'memory')
+
+    let bases = []
+    try {
+      bases = fs.readdirSync(memDir)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => f.replace(/\.json$/, ''))
+    } catch { bases = [] }
+
+    // 探针文件：单独归档，不进 candidates、不参与清理（整文件删风险太高）
+    const probeFiles = []
+    for (const base of bases) {
+      if (!this._isProbeGid(base)) continue
+      const d = this._readJson(path.join(memDir, `${base}.json`))
+      probeFiles.push({file: base, count: (d?.memories ?? []).length})
+    }
+    probeFiles.sort((a, b) => b.count - a.count)
+    const probeTotal = probeFiles.reduce((s, p) => s + p.count, 0)
+
+    // 真实群：all 扫全量；group 只扫一个（探针 gid 不给扫）
+    const targets = scope === 'group'
+      ? (this._isProbeGid(normGid) ? [] : [this._diskName(normGid, 'memory')])
+      : this._realGids(memDir)
+
+    const byTier = {short: 0, mid: 0, long: 0, unknown: 0}
+    const entries = []
+    let groups = 0
+
+    for (const disk of targets) {
+      const d = this._readJson(path.join(memDir, `${disk}.json`))
+      if (!Array.isArray(d?.memories)) continue
+      groups++
+      const g = this._norm(disk)
+      const gname = this._groupName(g)
+      d.memories.forEach((m, index) => {
+        const tier = String(m?.tier ?? '')
+        const createdAt = Number(m?.createdAt) || 0
+        const lastTouched = Number(m?.lastTouched) || 0
+        const value = Number(m?.value) || 0
+        const consolidation = Number(m?.consolidation) || 0
+        const ageDays = createdAt ? Math.floor((now - createdAt) / 86400000) : 0
+        const reasons = []
+        if (value < lowValue) reasons.push('lowValue')
+        if (now - (lastTouched || createdAt) > staleMs) reasons.push('stale')
+        if (consolidation === 0 && now - createdAt > minAgeMs) reasons.push('unconsolidated')
+        entries.push({
+          gid: g,
+          gname,
+          index,
+          text: String(m?.text ?? ''),
+          value,
+          tier,
+          createdAt,
+          lastTouched,
+          consolidation,
+          ageDays,
+          reasons,
+          dupWith: [],
+        })
+        byTier[tier === 'short' || tier === 'mid' || tier === 'long' ? tier : 'unknown']++
+      })
+    }
+
+    // 跨群重复：同一指纹出现在 ≥2 个不同 gid 才算重复（同群内重复不算）
+    const fpMap = new Map()
+    for (const e of entries) {
+      const fp = this._fingerprint(e.text)
+      if (!fp) continue
+      if (!fpMap.has(fp)) fpMap.set(fp, [])
+      fpMap.get(fp).push(e)
+    }
+    for (const list of fpMap.values()) {
+      const gids = [...new Set(list.map((e) => e.gid))]
+      if (gids.length < 2) continue
+      for (const e of list) {
+        e.reasons.push('duplicate')
+        e.dupWith = gids.filter((g) => g !== e.gid).slice(0, 5)
+      }
+    }
+
+    const issues = {lowValue: 0, stale: 0, unconsolidated: 0, duplicate: 0, probe: probeTotal}
+    for (const e of entries) {
+      for (const r of e.reasons) if (issues[r] !== undefined) issues[r]++
+    }
+
+    const total = entries.length
+    const flagged = entries.filter((e) => e.reasons.length > 0)
+    // 分数按「全部命中数」算，列表只截断展示，避免候选 >200 时分数失真
+    const score = total ? Math.max(0, Math.min(100, Math.round(100 * (1 - flagged.length / total)))) : 100
+
+    flagged.sort((a, b) => a.value - b.value || b.ageDays - a.ageDays)
+
+    return {
+      scope,
+      gid: scope === 'group' ? normGid : '',
+      total,
+      groups,
+      byTier,
+      score,
+      issues,
+      candidates: flagged.slice(0, 200).map((e) => ({
+        gid: e.gid,
+        gname: e.gname,
+        index: e.index,
+        text: e.text,
+        value: e.value,
+        tier: e.tier,
+        createdAt: e.createdAt,
+        lastTouched: e.lastTouched,
+        ageDays: e.ageDays,
+        reasons: e.reasons,
+        dupWith: e.dupWith,
+      })),
+      probeFiles,
+    }
+  }
+
   /* ---------------------------------------------------------------- 干预（写操作） */
 
   /**
@@ -216,6 +371,95 @@ export class YingMindService extends Service {
     this._writeJson(file, d)
     logger?.mark?.(`[YingMind] 已删除记忆 ${this._norm(gid)}#${i}: ${String(removed?.text || '').slice(0, 30)}...`)
     return { text: String(removed?.text || ''), remaining: d.memories.length }
+  }
+
+  /**
+   * 批量清理记忆（体检候选）。
+   *
+   * keys = [{gid, index, oldText}]，index 来自 health().candidates 的原始下标。
+   * 流程：先整文件备份 → 按群分组、每群只读一次 → 组内 index 降序删（防数组位移）→ 原子写回。
+   * oldText 前 60 字对不上就跳过该条（YingAI 并发增删导致的漂移），不抛错。
+   */
+  async cleanupMemories(keys, opts = {}) {
+    const list = Array.isArray(keys) ? keys : []
+    if (!list.length) throw new Error('没有需要清理的记忆')
+    if (list.length > 300) throw new Error('单次最多清理 300 条')
+
+    // 按群分组（探针 gid / 空 gid 直接忽略）
+    const byGid = new Map()
+    for (const k of list) {
+      const g = this._norm(k?.gid)
+      if (!g || this._isProbeGid(g)) continue
+      if (!byGid.has(g)) byGid.set(g, [])
+      byGid.get(g).push(k)
+    }
+    if (!byGid.size) throw new Error('没有可清理的记忆')
+
+    const backupDir = path.join(this.dataDir, '_backup_memory_cleanup_' + this._stamp())
+    fs.mkdirSync(backupDir, {recursive: true})
+
+    let removed = 0
+    let skipped = 0
+    const files = []
+
+    for (const [g, arr] of byGid) {
+      const disk = this._diskName(g, 'memory')
+      const file = path.join(this.dataDir, 'memory', `${disk}.json`)
+      if (!fs.existsSync(file)) {
+        skipped += arr.length
+        continue
+      }
+      // 备份必须先成功，失败则整群不动
+      try {
+        fs.copyFileSync(file, path.join(backupDir, `${disk}.json`))
+      } catch {
+        skipped += arr.length
+        continue
+      }
+      const d = this._readJson(file)
+      if (!d || !Array.isArray(d.memories)) {
+        skipped += arr.length
+        continue
+      }
+      const seen = new Set()
+      const items = []
+      for (const k of arr) {
+        const i = Number(k?.index)
+        if (!Number.isInteger(i) || i < 0) { skipped++; continue }
+        if (seen.has(i)) continue
+        seen.add(i)
+        items.push([i, k])
+      }
+      items.sort((a, b) => b[0] - a[0])
+      let removedInGroup = 0
+      for (const [i, k] of items) {
+        const m = d.memories[i]
+        if (!m) { skipped++; continue }
+        if (String(m.text ?? '').slice(0, 60) !== String(k?.oldText ?? '').slice(0, 60)) {
+          skipped++
+          continue
+        }
+        d.memories.splice(i, 1)
+        removed++
+        removedInGroup++
+      }
+      // 整群全部漂移跳过时不回写，避免把读到的旧快照盖回 YingAI 的新内容
+      if (!removedInGroup) continue
+      // 删空也写回 {memories: []}，保持文件结构
+      this._writeJson(file, d)
+      files.push(path.basename(file))
+    }
+
+    // 重新扫一遍真实群，给出清理后的总量
+    const memDir = path.join(this.dataDir, 'memory')
+    let remainingTotal = 0
+    for (const disk of this._realGids(memDir)) {
+      const d = this._readJson(path.join(memDir, `${disk}.json`))
+      if (Array.isArray(d?.memories)) remainingTotal += d.memories.length
+    }
+
+    logger?.mark?.(`[YingMind] 记忆体检清理：删除 ${removed} 条，备份 ${backupDir}`)
+    return {removed, skipped, files, backupDir, remainingTotal}
   }
 
   /**

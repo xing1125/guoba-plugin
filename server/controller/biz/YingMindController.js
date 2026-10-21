@@ -8,9 +8,11 @@ import {ApiController} from '#guoba.platform'
  * GET  /admin/yingmind/memories?gid=     某群记忆列表（按重要度降序）
  * GET  /admin/yingmind/relations?gid=    某群关系列表 + 里程碑
  * GET  /admin/yingmind/emotion?gid=      某群情绪快照
+ * GET  /admin/yingmind/health?gid=       记忆体检报告（gid 空则扫全部真实群）
  * POST /admin/yingmind/memories/delete   删除记忆 {gid, index, oldText, confirm}
  * POST /admin/yingmind/memories/update   编辑记忆 {gid, index, text, value, oldText, confirm}
  * POST /admin/yingmind/emotion/set       校正情绪 {gid, mood, value, confirm}
+ * POST /admin/yingmind/cleanup           批量清理体检候选 {keys: [{gid, index, oldText}], confirm}
  */
 export default class YingMindController extends ApiController {
 
@@ -27,9 +29,11 @@ export default class YingMindController extends ApiController {
     this.get('/memories', this.memories)
     this.get('/relations', this.relations)
     this.get('/emotion', this.emotion)
+    this.get('/health', this.health)
     this.post('/memories/delete', this.deleteMemory)
     this.post('/memories/update', this.updateMemory)
     this.post('/emotion/set', this.setEmotion)
+    this.post('/cleanup', this.cleanup)
   }
 
   /* ------------------------------ 写接口守卫 ------------------------------ */
@@ -81,6 +85,15 @@ export default class YingMindController extends ApiController {
     return Result.ok(this.yingMindService.emotion(req.query?.gid))
   }
 
+  async health(req) {
+    const q = req.query || {}
+    return Result.ok(this.yingMindService.health(q.gid || '', {
+      staleDays: q.staleDays,
+      lowValue: q.lowValue,
+      minAge: q.minAge,
+    }))
+  }
+
   /* ------------------------------ 写 ------------------------------ */
 
   async deleteMemory(req) {
@@ -117,6 +130,24 @@ export default class YingMindController extends ApiController {
       const data = await this.yingMindService.setEmotion(gid, {mood, value})
       this._audit(req, 'yingmind.emotion.set', gid, `校正情绪: ${data.mood} ${data.value}`)
       return Result.ok(data, '已校正')
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  async cleanup(req) {
+    const {keys} = req.body || {}
+    if (!this._confirmed(req)) return Result.error('缺少二次确认（confirm）')
+    if (!this._rateLimit(req, 'ymClean', 5)) return Result.error('操作过于频繁，稍后再试')
+    try {
+      const data = await this.yingMindService.cleanupMemories(keys)
+      // 跨群清理时 target 记 all
+      const gids = [...new Set((Array.isArray(keys) ? keys : [])
+        .map((k) => String(k?.gid || '').replace('@chatroom', ''))
+        .filter(Boolean))]
+      const target = gids.length === 1 ? gids[0] : 'all'
+      this._audit(req, 'yingmind.memory.cleanup', target, `清理 ${data.removed} 条，备份 ${data.backupDir}`)
+      return Result.ok(data, `已清理 ${data.removed} 条`)
     } catch (e) {
       return Result.error(e.message)
     }
