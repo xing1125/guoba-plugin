@@ -53,6 +53,7 @@ export const MENU_CATALOGUE = [
   {perm: 'yingai', name: 'AI 私聊'},
   {perm: 'ying-mind', name: '荧之心智'},
   {perm: 'plugins-data', name: '插件数据'},
+  {perm: 'plugin-health', name: '插件健康'},
   {perm: 'sign', name: '签到中心'},
   {perm: 'nav-mgr', name: '导航管理'},
   {perm: 'chat-diag', name: '聊天诊断'},

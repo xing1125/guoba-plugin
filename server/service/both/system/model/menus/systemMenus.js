@@ -210,6 +210,17 @@ export const SystemMenus = {
       icon: 'gmg:bot',
     },
   },
+  // 插件健康（加载状态/数据体积 · 云崽管理后台扩展）
+  pluginHealth: {
+    path: '/plugin-health',
+    name: 'PluginHealth',
+    component: '/guoba/system/pluginhealth/index',
+    meta: {
+      perm: 'plugin-health',
+      title: '插件健康',
+      icon: 'gmg:pulse',
+    },
+  },
   // 荧之心智（YingAI 记忆/关系/情绪观测 · 云崽管理后台扩展）
   yingMind: {
     path: '/ying-mind',

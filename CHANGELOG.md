@@ -1,3 +1,12 @@
+# 2.4.6
+
+新模块「插件健康」：磁盘插件的真实装载状态与数据体积。
+
+* 新增 `PluginHealthService`：对比磁盘插件目录与 Yunzai `lib/plugins/loader.js` 的 `priority`（key = 插件目录名）判定加载状态；目录大小递归统计（排除 node_modules/隐藏文件，10 分钟缓存）；跳过 adapter/example/system 等非插件约定目录
+* 新增 `PluginHealthController`：`GET /admin/plugin-health/list`
+* 新增菜单「插件健康」（`plugin-health`，图标 `gmg:pulse`）+ 权限目录
+* **需重启 Bot 生效**
+
 # 2.4.5
 
 新模块「荧之心智」：只读观测荧（YingAI）的记忆 / 关系 / 情绪。
