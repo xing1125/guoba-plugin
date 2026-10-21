@@ -17,6 +17,8 @@ export default class SignController extends ApiController {
 
   opsService = autowired('accountOpsService')
 
+  healthService = autowired('signHealthService')
+
   constructor(guobaApp) {
     super('/admin/sign', guobaApp)
     this._hits = new Map()
@@ -33,6 +35,8 @@ export default class SignController extends ApiController {
     this.get('/waves/overview', this.wavesOverview)
     this.get('/waves/records', this.wavesRecords)
     this.get('/waves/day/:date', this.wavesDay)
+    this.get('/health', this.health)
+    this.post('/health/check', this.healthCheck)
   }
 
   /* ------------------------------ 写操作工具 ------------------------------ */
@@ -211,5 +215,23 @@ export default class SignController extends ApiController {
     const date = req.params?.date ? String(req.params.date) : ''
     const data = this.wavesSignService.getDay(date)
     return Result.ok(data.available ? data : {...data, userList: []})
+  }
+
+  /* ------------------------------ 健康度 + 告警 ------------------------------ */
+
+  async health() {
+    // 实时评估很便宜（SignService 有 mtime 缓存），页面每次打开都拿最新值
+    return Result.ok(await this.healthService.evaluate({notify: false}))
+  }
+
+  async healthCheck(req) {
+    if (!this._rateLimit(req, 'sign.healthCheck', 5, 60_000)) {
+      return Result.error('操作过于频繁，一分钟后再试')
+    }
+    if (req.body?.confirm !== true) {
+      return Result.error('推送告警需要 confirm 确认')
+    }
+    const snapshot = await this.healthService.evaluate({notify: true})
+    return Result.ok({...snapshot, requestedNotify: true})
   }
 }

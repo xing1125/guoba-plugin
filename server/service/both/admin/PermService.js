@@ -49,6 +49,7 @@ export const MENU_CATALOGUE = [
   {perm: 'groups', name: '群数据'},
   {perm: 'users-data', name: '用户数据'},
   {perm: 'rank', name: '群战力榜'},
+  {perm: 'scheduler', name: '定时任务'},
   {perm: 'yingai', name: 'AI 私聊'},
   {perm: 'plugins-data', name: '插件数据'},
   {perm: 'sign', name: '签到中心'},

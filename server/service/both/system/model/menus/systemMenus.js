@@ -188,6 +188,17 @@ export const SystemMenus = {
       icon: 'gmg:gauge',
     },
   },
+  // 定时任务（后台调度中心 · 云崽管理后台扩展）
+  scheduler: {
+    path: '/scheduler',
+    name: 'Scheduler',
+    component: '/guoba/system/scheduler/index',
+    meta: {
+      perm: 'scheduler',
+      title: '定时任务',
+      icon: 'gmg:pulse',
+    },
+  },
   // AI 私聊（YingAIPrivate · 云崽管理后台扩展）
   yingai: {
     path: '/yingai',

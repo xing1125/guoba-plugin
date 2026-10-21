@@ -126,4 +126,16 @@ function appMounted(guobaApp) {
   } catch (e) {
     logger?.warn?.(`[Guoba] RBAC 种子初始化失败：${e.message}`)
   }
+  // 定时任务中心：调度器随后台一起启动（幂等，重复调用不会起两个定时器）
+  try {
+    instancesMap?.get('cronService')?.start?.()
+  } catch (e) {
+    logger?.warn?.(`[Guoba] 定时任务调度器启动失败：${e.message}`)
+  }
+  // 签到健康度：周期体检 + 新告警推送主人
+  try {
+    instancesMap?.get('signHealthService')?.start?.()
+  } catch (e) {
+    logger?.warn?.(`[Guoba] 签到健康度巡检启动失败：${e.message}`)
+  }
 }

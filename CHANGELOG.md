@@ -1,13 +1,27 @@
 # 2.4.0
 
-群战力榜：把 miao-plugin 的群内排名数据搬进面板（只读，不改插件）。
+三件套：群战力榜、定时任务中心、签到健康度 + 告警。
 
-* 新增 `RankService`：扫描 `miao:rank:*`（60 秒缓存），解析 `miao:rank:<gid>:<type>:<charId>` 结构与 `miao:rank:uid-info:<uid>` 的账号映射，角色名从 `miao-plugin/resources/meta-{gs,sr}/character/data.json` 取，读不到时退化成 `#id` 而不是报错
-* 新增 `RankController`：`GET /admin/rank/groups`（有哪些群、各类型角色数）、`GET /admin/rank/board?gid=&type=&charId=&limit=`（Top N 明细 + 均值/最高分）
-* 榜单维度只认真正有数据的类型（伤害 / 评分），角色默认取参与人数最多的那个
+**群战力榜（只读）**
+
+* 新增 `RankService`：扫描 `miao:rank:*`（60 秒缓存），解析 `miao:rank:<gid>:<type>:<charId>` 与 `miao:rank:uid-info:<uid>` 的账号映射，角色名从 `miao-plugin/resources/meta-{gs,sr}/character/data.json` 取，读不到时退化成 `#id`
+* 新增 `RankController`：`GET /admin/rank/groups`、`GET /admin/rank/board?gid=&type=&charId=&limit=`
 * **Redis 5 兼容**：客户端 4.7.1 没有 `zRevRangeWithScores`，而 `ZRANGE ... REV` 在 Redis 5 会语法错误，改走 `ZREVRANGE key 0 N WITHSCORES` 原生命令
-* `StatsService` 开放 `userNameMap()` / `groupNameMap()`，供其它 service 复用账号与群名映射
-* 菜单新增「群战力榜」（`/rank`），权限目录新增 `rank` 项
+* `StatsService` 开放 `userNameMap()` / `groupNameMap()`
+
+**定时任务中心**
+
+* 新增 `CronService`：自写 5 段 cron 解析（`*/n`、区间、列表、`@daily` 别名），每 20 秒巡检，「同一分钟只跑一次」+ `last_run_at` 双保险，重启不重复触发
+* 执行复用 `ConsoleService.exec` 模拟真实消息链路（`skipThrottle` 新参数跳过手动节流，危险指令视为已预授权），老插件零改造
+* 新增 `CronController`：`/admin/cron/tasks|targets|history|preview|save|toggle|delete|run`，写接口 confirm + 限流 + 审计
+* 任务存 admin.db `cron_task` 表（执行次数 / 失败数 / 最近结果），执行历史存 Redis（保留 100 条）
+* 调度器在 `appMounted` 随后台启动；菜单新增「定时任务」（`/scheduler`），权限项 `scheduler`
+
+**签到健康度 + 告警**
+
+* 新增 `SignHealthService`：把 CK 失效 / 近 7 天全失败 / 悬空绑定 / 今日成功率折算成 0-100 健康分，规则命中生成带稳定 key 的告警
+* 新告警第一次出现自动私聊每个 Bot 的第一个主人；已知告警不重复推送；快照存 Redis，重启不丢
+* 30 分钟自动巡检（`appMounted` 启动）；`SignController` 新增 `GET /admin/sign/health`、`POST /admin/sign/health/check`
 
 # 2.3.28
 

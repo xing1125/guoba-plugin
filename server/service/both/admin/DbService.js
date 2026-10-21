@@ -212,7 +212,115 @@ export class DbService extends Service {
         created_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_login_created ON login_log(created_at);
+
+      /* ---- 定时任务（后台调度中心）----
+         cmd 存的是「像用户发出来的一条指令」，执行时走 ConsoleService.exec
+         模拟真实消息链路，因此老插件不需要任何改造就能被定时触发 */
+      CREATE TABLE IF NOT EXISTS cron_task (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        cron        TEXT NOT NULL,
+        kind        TEXT NOT NULL DEFAULT 'group',
+        target_id   TEXT NOT NULL,
+        target_name TEXT,
+        cmd         TEXT NOT NULL,
+        deliver     INTEGER NOT NULL DEFAULT 1,
+        enabled     INTEGER NOT NULL DEFAULT 1,
+        created_by  TEXT,
+        created_at  TEXT,
+        updated_at  TEXT,
+        last_run_at TEXT,
+        last_status TEXT,
+        last_msg    TEXT,
+        runs        INTEGER NOT NULL DEFAULT 0,
+        fails       INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_cron_enabled ON cron_task(enabled);
     `)
+  }
+
+  /* ------------------------------ 定时任务 ------------------------------ */
+
+  listCronTasks() {
+    return this.getAdminDb().prepare('SELECT * FROM cron_task ORDER BY id ASC').all()
+  }
+
+  getCronTask(id) {
+    return this.getAdminDb().prepare('SELECT * FROM cron_task WHERE id = ?').get(Number(id)) || null
+  }
+
+  createCronTask(t = {}) {
+    const now = new Date().toISOString()
+    const info = this.getAdminDb()
+      .prepare(
+        `INSERT INTO cron_task (name, cron, kind, target_id, target_name, cmd, deliver, enabled, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        String(t.name || ''),
+        String(t.cron || ''),
+        String(t.kind || 'group'),
+        String(t.targetId || t.target_id || ''),
+        String(t.targetName || t.target_name || ''),
+        String(t.cmd || ''),
+        t.deliver === false ? 0 : 1,
+        t.enabled === false ? 0 : 1,
+        String(t.createdBy || t.created_by || ''),
+        now,
+        now,
+      )
+    return this.getCronTask(info.lastInsertRowid)
+  }
+
+  updateCronTask(id, patch = {}) {
+    const map = {
+      name: 'name',
+      cron: 'cron',
+      kind: 'kind',
+      targetId: 'target_id',
+      target_id: 'target_id',
+      targetName: 'target_name',
+      target_name: 'target_name',
+      cmd: 'cmd',
+      deliver: 'deliver',
+      enabled: 'enabled',
+    }
+    const sets = []
+    const args = []
+    for (const [k, col] of Object.entries(map)) {
+      if (patch[k] === undefined) continue
+      let v = patch[k]
+      if (col === 'deliver' || col === 'enabled') v = v ? 1 : 0
+      sets.push(`${col} = ?`)
+      args.push(typeof v === 'string' ? v : v)
+      // 同一个列被别名写两次时会重复，去掉后出现的
+      if (sets.length > 1 && sets[sets.length - 1].split(' ')[0] === sets[sets.length - 2].split(' ')[0]) {
+        sets.splice(sets.length - 1, 1)
+        args.pop()
+      }
+    }
+    if (!sets.length) return this.getCronTask(id)
+    sets.push('updated_at = ?')
+    args.push(new Date().toISOString(), Number(id))
+    this.getAdminDb().prepare(`UPDATE cron_task SET ${sets.join(', ')} WHERE id = ?`).run(...args)
+    return this.getCronTask(id)
+  }
+
+  deleteCronTask(id) {
+    return this.getAdminDb().prepare('DELETE FROM cron_task WHERE id = ?').run(Number(id)).changes > 0
+  }
+
+  /** 记录一次执行结果 */
+  touchCronTask(id, {status = 'ok', msg = '', at = new Date().toISOString()} = {}) {
+    this.getAdminDb()
+      .prepare(
+        `UPDATE cron_task
+            SET last_run_at = ?, last_status = ?, last_msg = ?,
+                runs = runs + 1,
+                fails = fails + CASE WHEN ? = 'ok' THEN 0 ELSE 1 END
+          WHERE id = ?`,
+      )
+      .run(at, status, String(msg).slice(0, 500), status, Number(id))
   }
 
   /** 写入同步任务状态 */

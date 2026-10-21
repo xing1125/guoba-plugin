@@ -155,9 +155,10 @@ export class ConsoleService extends Service {
    * @param deliver  是否把回复真的发到目标会话（false = 仅预览）
    * @param asOwner  是否以群主身份执行（群管指令需要）
    * @param confirm  危险指令放行标记
+   * @param skipThrottle 跳过「60 秒 20 次」的手动节流（定时任务用）
    */
-  async exec({kind = 'group', id, cmd, deliver = false, asOwner = true, confirm = false, timeout = 6000} = {}) {
-    this._throttle()
+  async exec({kind = 'group', id, cmd, deliver = false, asOwner = true, confirm = false, skipThrottle = false, timeout = 6000} = {}) {
+    if (!skipThrottle) this._throttle()
 
     const target = this._checkTarget(kind, id)
     const text = String(cmd ?? '').trim()
