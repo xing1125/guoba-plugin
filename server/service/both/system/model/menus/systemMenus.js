@@ -177,6 +177,17 @@ export const SystemMenus = {
       icon: 'gmg:user',
     },
   },
+  // 群战力榜（miao-plugin 排名数据 · 云崽管理后台扩展）
+  rank: {
+    path: '/rank',
+    name: 'GroupRank',
+    component: '/guoba/system/rank/index',
+    meta: {
+      perm: 'rank',
+      title: '群战力榜',
+      icon: 'gmg:gauge',
+    },
+  },
   // AI 私聊（YingAIPrivate · 云崽管理后台扩展）
   yingai: {
     path: '/yingai',

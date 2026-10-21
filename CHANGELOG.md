@@ -1,3 +1,14 @@
+# 2.4.0
+
+群战力榜：把 miao-plugin 的群内排名数据搬进面板（只读，不改插件）。
+
+* 新增 `RankService`：扫描 `miao:rank:*`（60 秒缓存），解析 `miao:rank:<gid>:<type>:<charId>` 结构与 `miao:rank:uid-info:<uid>` 的账号映射，角色名从 `miao-plugin/resources/meta-{gs,sr}/character/data.json` 取，读不到时退化成 `#id` 而不是报错
+* 新增 `RankController`：`GET /admin/rank/groups`（有哪些群、各类型角色数）、`GET /admin/rank/board?gid=&type=&charId=&limit=`（Top N 明细 + 均值/最高分）
+* 榜单维度只认真正有数据的类型（伤害 / 评分），角色默认取参与人数最多的那个
+* **Redis 5 兼容**：客户端 4.7.1 没有 `zRevRangeWithScores`，而 `ZRANGE ... REV` 在 Redis 5 会语法错误，改走 `ZREVRANGE key 0 N WITHSCORES` 原生命令
+* `StatsService` 开放 `userNameMap()` / `groupNameMap()`，供其它 service 复用账号与群名映射
+* 菜单新增「群战力榜」（`/rank`），权限目录新增 `rank` 项
+
 # 2.3.28
 
 * **主题跟随系统**：头部深浅色开关改成三态（跟随系统 → 浅色 → 深色 → 跟随系统），默认「跟随系统」，读 `prefers-color-scheme`；系统切换深浅色时面板实时跟着变，不用刷新

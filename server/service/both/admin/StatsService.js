@@ -841,6 +841,18 @@ export class StatsService extends Service {
     }
   }
 
+  /* 对外公开的映射（其它 service 复用，别各自再扫一遍 Bot 内存） */
+
+  /** uid -> 昵称 */
+  userNameMap() {
+    return this._userNameMap()
+  }
+
+  /** gid -> 群名（拿不到为 ''） */
+  groupNameMap() {
+    return this._groupList()
+  }
+
   /**
    * 昵称映射（uid -> 昵称）
    * 数据源优先级：好友备注 > 好友昵称 > 群名片 > 群昵称

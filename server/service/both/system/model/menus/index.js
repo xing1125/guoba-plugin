@@ -26,6 +26,7 @@ export async function useAllMenus() {
   menus.push(SystemMenus.miaoImg)
   menus.push(SystemMenus.groups)
   menus.push(SystemMenus.usersData)
+  menus.push(SystemMenus.rank)
   menus.push(SystemMenus.yingai)
   menus.push(SystemMenus.chatDiag)
   menus.push(SystemMenus.dbHealth)
