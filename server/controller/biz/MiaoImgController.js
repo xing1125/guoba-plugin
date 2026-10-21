@@ -8,6 +8,7 @@ import {ApiController} from '#guoba.platform'
  *
  * 在后台替代聊天指令 `#上传xx面板图` / `#上传xx图片`：
  *   GET  /characters?kind=profile|character|art   有图的角色清单
+ *   GET  /catalog?kind=profile|character|art      角色总表（官方角色+星级+属性，供筛选网格）
  *   GET  /list?kind=&name=                    某角色图片列表
  *   POST /upload   (multipart: kind,name,files[])  上传（md5 命名，与喵喵约定一致）
  *   POST /mkdir    {kind,name}                  创建角色目录（幂等，先建文件夹可手动复制图片）
@@ -35,6 +36,7 @@ export default class MiaoImgController extends ApiController {
 
   registerRouters() {
     this.get('/characters', this.characters)
+    this.get('/catalog', this.catalog)
     this.get('/list', this.list)
     this.post('/upload', this.upload)
     this.post('/mkdir', this.mkdir)
@@ -83,6 +85,15 @@ export default class MiaoImgController extends ApiController {
   async characters(req) {
     try {
       return Result.ok(this.miaoImgService.characters(String(req.query?.kind || '')))
+    } catch (e) {
+      return Result.error(e.message)
+    }
+  }
+
+  /** 角色总表（官方角色 + 已有图目录），带星级/属性，供角色网格筛选 */
+  async catalog(req) {
+    try {
+      return Result.ok(this.miaoImgService.catalog(String(req.query?.kind || '')))
     } catch (e) {
       return Result.error(e.message)
     }

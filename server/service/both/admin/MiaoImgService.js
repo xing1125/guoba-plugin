@@ -62,6 +62,8 @@ export class MiaoImgService extends Service {
       },
     }
     this.trashDir = path.resolve(_paths.pluginRoot, '..', '..', 'temp', 'guoba-trash')
+    // miao 官方角色表缓存（进程内，meta 文件不会热更）
+    this._metaCache = null
   }
 
   _kind(kind) {
@@ -193,6 +195,110 @@ export class MiaoImgService extends Service {
     }
     out.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hans-CN'))
     return {kind, label: k.label, list: out}
+  }
+
+  /* ------------------------------ 角色总表 ------------------------------ */
+
+  /**
+   * 官方角色表（miao 的 meta）：原神 127 + 星铁 108，含星级与属性。
+   * 属性原神是英文（cryo）、星铁是中文（冰），这里统一成中文。
+   */
+  _catalogMeta() {
+    if (this._metaCache) return this._metaCache
+    const map = new Map()
+    // 原神用英文（cryo/pyro/…），星铁用中文（冰/风/…），这里统一成中文
+    const elemCn = {
+      cryo: '冰',
+      pyro: '火',
+      hydro: '水',
+      dendro: '草',
+      electro: '雷',
+      anemo: '风',
+      geo: '岩',
+      quantum: '量子',
+      imaginary: '虚无',
+      ice: '冰',
+      fire: '火',
+      wind: '风',
+      physical: '物理',
+      blast: '爆破',
+      虚数: '虚无',
+      multi: '多属性',
+    }
+    for (const [game, dir, label] of [
+      ['gs', 'meta-gs', '原神'],
+      ['sr', 'meta-sr', '星铁'],
+    ]) {
+      try {
+        const file = path.join(this.miaoRes, dir, 'character', 'data.json')
+        const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+        const list = Array.isArray(raw) ? raw : Object.values(raw)
+        for (const c of list) {
+          const name = String(c?.name || '').trim()
+          if (!name) continue
+          const e = String(c?.elem || '').trim()
+          map.set(name, {
+            name,
+            game,
+            gameLabel: label,
+            star: Number(c?.star) || 0,
+            elem: elemCn[e] || e,
+          })
+        }
+      } catch {
+        /* miao 没装或结构变了：这一段游戏就没有角色表 */
+      }
+    }
+    this._metaCache = map
+    return map
+  }
+
+  /**
+   * 角色总表 = 官方角色（没上传图也列出来）+ 磁盘上的自定义目录。
+   * 这样不用靠手打名字找角色，也避免把目录名写错。
+   */
+  catalog(kind) {
+    const k = this._kind(kind)
+    const disk = this.characters(kind)
+    const meta = this._catalogMeta()
+    const list = []
+    const seen = new Set()
+    for (const d of disk.list) {
+      const m = meta.get(d.name)
+      list.push({
+        name: d.name,
+        count: d.count,
+        game: m?.game || '',
+        gameLabel: m?.gameLabel || '',
+        star: m?.star || 0,
+        elem: m?.elem || '',
+        custom: !m,
+      })
+      seen.add(d.name)
+    }
+    for (const m of meta.values()) {
+      if (seen.has(m.name)) continue
+      list.push({...m, count: 0, custom: false})
+    }
+    const order = (c) => (c.game === 'gs' ? 0 : c.game === 'sr' ? 1 : 2)
+    list.sort((a, b) => {
+      const g = order(a) - order(b)
+      if (g !== 0) return g
+      if (b.star !== a.star) return b.star - a.star
+      return a.name.localeCompare(b.name, 'zh-Hans-CN')
+    })
+    return {
+      kind,
+      label: k.label,
+      list,
+      stats: {
+        gs: list.filter((c) => c.game === 'gs').length,
+        sr: list.filter((c) => c.game === 'sr').length,
+        custom: list.filter((c) => c.custom).length,
+        total: list.length,
+        withImages: disk.list.length,
+      },
+    }
   }
 
   /** 某角色图片列表（rel 为相对 miaoRes 的路径，供前端预览/删除用） */
