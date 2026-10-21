@@ -44,15 +44,28 @@ export class YingMindService extends Service {
     return !g || /^__probe_/.test(g) || /^test_/.test(g)
   }
 
-  /** 目录里所有「真实群」的 gid（去掉 @chatroom 后缀，剔除探针文件） */
+  /** 目录里所有「真实群」的磁盘基名（文件去 .json，目录保留原名；剔除探针） */
   _realGids(dir) {
     let files = []
     try { files = fs.readdirSync(dir) } catch { return [] }
     return files
-      .filter((f) => f.endsWith('.json'))
       .map((f) => f.replace(/\.json$/, ''))
-      .map((g) => g.replace('@chatroom', ''))
       .filter((g) => !this._isProbeGid(g))
+  }
+
+  /** 对外 gid 归一（去 @chatroom） */
+  _norm(g) {
+    return String(g || '').replace('@chatroom', '')
+  }
+
+  /** 把归一 gid 还原成磁盘名：优先带 @chatroom 的文件/目录，否则原名 */
+  _diskName(gid, dir) {
+    const g = this._norm(gid)
+    for (const c of [g + '@chatroom', g]) {
+      const base = path.join(this.dataDir, dir, c)
+      if (fs.existsSync(base) || fs.existsSync(base + '.json')) return c
+    }
+    return g
   }
 
   /** 群名：群名无持久化，唯一来源是运行时 Bot[uin].gl */
@@ -82,16 +95,22 @@ export class YingMindService extends Service {
       ...this._realGids(path.join(this.dataDir, 'emotion')),
     ])
     const out = []
-    for (const gid of gidSet) {
-      const mem = this._readJson(path.join(this.dataDir, 'memory', `${gid}.json`))
-      const rel = this._readJson(path.join(this.dataDir, 'relationships', gid, 'bot.json'))
-      const emo = this._readJson(path.join(this.dataDir, 'emotion', `${gid}.json`))
+    for (const diskGid of gidSet) {
+      const gid = this._norm(diskGid)
+      const mem = this._readJson(path.join(this.dataDir, 'memory', `${diskGid}.json`))
+      const rel = this._readJson(path.join(this.dataDir, 'relationships', diskGid, 'bot.json'))
+      const emo = this._readJson(path.join(this.dataDir, 'emotion', `${diskGid}.json`))
+      const memoryCount = mem?.memories?.length ?? 0
+      const relationCount = rel ? Object.keys(rel).length : 0
+      const mood = emo?.mood ?? ''
+      // 三样全空的群（如空目录 tg_dim）不展示
+      if (!memoryCount && !relationCount && !mood) continue
       out.push({
         gid,
         name: this._groupName(gid),
-        memoryCount: mem?.memories?.length ?? 0,
-        relationCount: rel ? Object.keys(rel).length : 0,
-        mood: emo?.mood ?? '',
+        memoryCount,
+        relationCount,
+        mood,
         moodValue: Number(emo?.value) || 0,
       })
     }
@@ -104,9 +123,10 @@ export class YingMindService extends Service {
    * 某群的记忆列表（按 value 重要度降序）
    */
   memories(gid) {
-    const g = String(gid || '').replace('@chatroom', '')
+    const g = this._norm(gid)
     if (this._isProbeGid(g)) return []
-    const d = this._readJson(path.join(this.dataDir, 'memory', `${g}.json`))
+    const disk = this._diskName(g, 'memory')
+    const d = this._readJson(path.join(this.dataDir, 'memory', `${disk}.json`))
     const list = (d?.memories ?? []).map((m, i) => ({
       id: i,
       text: String(m.text ?? ''),
@@ -124,10 +144,11 @@ export class YingMindService extends Service {
    * 某群的关系列表（按 affinity 亲密度降序）+ 里程碑
    */
   relations(gid) {
-    const g = String(gid || '').replace('@chatroom', '')
+    const g = this._norm(gid)
     if (this._isProbeGid(g)) return { list: [], milestones: {} }
-    const bot = this._readJson(path.join(this.dataDir, 'relationships', g, 'bot.json'))
-    const ms = this._readJson(path.join(this.dataDir, 'relationships', g, 'milestones.json'))
+    const disk = this._diskName(g, 'relationships')
+    const bot = this._readJson(path.join(this.dataDir, 'relationships', disk, 'bot.json'))
+    const ms = this._readJson(path.join(this.dataDir, 'relationships', disk, 'milestones.json'))
     const list = Object.entries(bot ?? {}).map(([uid, r]) => ({
       uid,
       trust: Number(r?.trust) || 0,
@@ -145,9 +166,10 @@ export class YingMindService extends Service {
 
   /** 某群的情绪快照 */
   emotion(gid) {
-    const g = String(gid || '').replace('@chatroom', '')
+    const g = this._norm(gid)
     if (this._isProbeGid(g)) return { mood: '', value: 0, updatedAt: 0 }
-    const d = this._readJson(path.join(this.dataDir, 'emotion', `${g}.json`))
+    const disk = this._diskName(g, 'emotion')
+    const d = this._readJson(path.join(this.dataDir, 'emotion', `${disk}.json`))
     return {
       mood: String(d?.mood ?? ''),
       value: Number(d?.value) || 0,
