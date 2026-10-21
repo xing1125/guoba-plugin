@@ -54,6 +54,7 @@ export const MENU_CATALOGUE = [
   {perm: 'ying-mind', name: '荧之心智'},
   {perm: 'plugins-data', name: '插件数据'},
   {perm: 'plugin-health', name: '插件健康'},
+  {perm: 'alert-center', name: '告警中心'},
   {perm: 'sign', name: '签到中心'},
   {perm: 'nav-mgr', name: '导航管理'},
   {perm: 'chat-diag', name: '聊天诊断'},

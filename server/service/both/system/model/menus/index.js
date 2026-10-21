@@ -34,6 +34,7 @@ export async function useAllMenus() {
   menus.push(SystemMenus.dbHealth)
   menus.push(SystemMenus.pluginsData)
   menus.push(SystemMenus.pluginHealth)
+  menus.push(SystemMenus.alertCenter)
   menus.push(SystemMenus.sign)
   menus.push(SystemMenus.navMgr)
   menus.push(SystemMenus.data)

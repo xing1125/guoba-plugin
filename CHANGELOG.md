@@ -1,3 +1,14 @@
+# 2.4.7
+
+新模块「告警中心」：签到/插件/系统三源告警聚合。
+
+* 新增 `AlertCenterService`：聚合 `SignHealthService.evaluate`（签到）、`PluginHealthService.list`（未装载插件）、os 内存水位与 wmic 磁盘剩余（10 分钟缓存，失败静默跳过）
+* 新增 `AlertCenterController`：`GET /admin/alert-center/list`
+* 新增菜单「告警中心」（`alert-center`，图标 `gmg:bell`）+ 权限目录
+* 只读聚合不落库；通知仍走 SignHealthService 私聊主人那套
+* **需重启 Bot 生效**
+
+
 # 2.4.6
 
 新模块「插件健康」：磁盘插件的真实装载状态与数据体积。

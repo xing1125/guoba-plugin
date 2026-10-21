@@ -221,6 +221,17 @@ export const SystemMenus = {
       icon: 'gmg:pulse',
     },
   },
+  // 告警中心（签到/插件/系统聚合 · 云崽管理后台扩展）
+  alertCenter: {
+    path: '/alert-center',
+    name: 'AlertCenter',
+    component: '/guoba/system/alertcenter/index',
+    meta: {
+      perm: 'alert-center',
+      title: '告警中心',
+      icon: 'gmg:bell',
+    },
+  },
   // 荧之心智（YingAI 记忆/关系/情绪观测 · 云崽管理后台扩展）
   yingMind: {
     path: '/ying-mind',
