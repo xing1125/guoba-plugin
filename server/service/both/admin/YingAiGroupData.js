@@ -59,13 +59,13 @@ export function createYingAiGroupData(pluginDir) {
    * @param {{days?:number, from?:string, to?:string, gid?:string}} q
    */
   async function load(q = {}) {
-    const key = `${q.days || 0}|${q.from || ''}|${q.to || ''}|${q.gid || ''}`
+    const key = `${q.days || 0}|${q.from || ''}|${q.to || ''}|${q.gid || ''}|${q.includeProbe ? 1 : 0}`
     if (cache && cache.key === key && Date.now() - cacheAt < CACHE_TTL) return cache
     if (inflight && inflight.key === key) return inflight.promise
 
     const promise = (async () => {
       const stats = await loadStats(pluginDir)
-      const {rows, files} = stats.readRows(diagDir, {days: q.days, from: q.from, to: q.to})
+      const {rows, files} = stats.readRows(diagDir, {days: q.days, from: q.from, to: q.to, includeProbe: !!q.includeProbe})
       const names = buildGroupNames(pluginDir)
       const decorated = rows.map((r) => ({...r, _gname: names.get(String(r.gid || '')) || ''}))
       const out = {
@@ -95,8 +95,8 @@ export function createYingAiGroupData(pluginDir) {
   }
 
   /** 可选筛选元信息：可用日期 + 群（带真名） */
-  async function meta() {
-    const {stats, rows, files, names} = await load({})
+  async function meta(q = {}) {
+    const {stats, rows, files, names} = await load(q)
     // V47.39：rows 现在也含主动发言行（source='proactive'）。群列表与「总轮次」保持 chat 口径，
     //   主动维度单独由 dashboard().proactive 提供，避免两套数字互相打架。
     const chatRows = rows.filter((r) => String(r.source || '') !== 'proactive')

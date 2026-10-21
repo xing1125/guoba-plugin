@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!--
+    YingPanel（荧后台）应用图标 · 荧 头像版
+
+    设计说明：
+      · 底板沿用深蓝夜空渐变（与后台品牌色一致），头部后方加一层金色柔光，
+        金发在深底上反差最大，缩到 32px 仍能一眼认出「金发角色」
+      · 人物做扁平化处理，只保留识别特征：金色双鬓长发、白花发饰、金色瞳
+      · 五官压到最小：三点眼线 + 一点唇形，避免小尺寸下糊成脏点
+      · 最上层再覆盖一层玻璃高光与描边，与图标集（gmg 毛玻璃方块）同一套材质语言
+
+    可读性约束：
+      · 头部占画布 40%（约 205px），缩到 32px 时头部仍有 12.8px，五官不会消失
+      · 白色花朵是第二识别点，缩略时形成右上角一块亮斑，轮廓不会和发色混在一起
+  -->
+  <defs>
+    <linearGradient id="tile" x1=".1" y1="0" x2=".9" y2="1">
+      <stop offset="0" stop-color="#33518f" />
+      <stop offset=".55" stop-color="#1d2c50" />
+      <stop offset="1" stop-color="#0f1730" />
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".42" r=".52">
+      <stop offset="0" stop-color="#ffd98a" stop-opacity=".42" />
+      <stop offset=".55" stop-color="#f0b95a" stop-opacity=".12" />
+      <stop offset="1" stop-color="#f0b95a" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="hair" x1=".2" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#ffe6ac" />
+      <stop offset=".45" stop-color="#f2cf83" />
+      <stop offset="1" stop-color="#d8a648" />
+    </linearGradient>
+    <linearGradient id="hairBack" x1=".3" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#e8bf6d" />
+      <stop offset="1" stop-color="#bb8734" />
+    </linearGradient>
+    <linearGradient id="skin" x1=".3" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#fdeedd" />
+      <stop offset="1" stop-color="#f2d3b6" />
+    </linearGradient>
+    <linearGradient id="dress" x1=".2" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#fdfbf4" />
+      <stop offset="1" stop-color="#e6e0cd" />
+    </linearGradient>
+    <linearGradient id="glassHi" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".26" />
+      <stop offset=".45" stop-color="#fff" stop-opacity=".05" />
+      <stop offset="1" stop-color="#fff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="glassShade" x1="0" y1=".45" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0" />
+      <stop offset="1" stop-color="#000" stop-opacity=".22" />
+    </linearGradient>
+    <clipPath id="tileClip">
+      <rect width="512" height="512" rx="116" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#tileClip)">
+    <!-- 底板与柔光 -->
+    <rect width="512" height="512" fill="url(#tile)" />
+    <rect width="512" height="512" fill="url(#glow)" />
+
+    <!-- 星屑（夜的质感，给纯色底一点层次） -->
+    <circle cx="96" cy="120" r="4" fill="#fff" fill-opacity=".34" />
+    <circle cx="430" cy="86" r="3" fill="#fff" fill-opacity=".28" />
+    <circle cx="118" cy="392" r="3.4" fill="#ffdf9f" fill-opacity=".4" />
+    <circle cx="410" cy="352" r="4.4" fill="#ffdf9f" fill-opacity=".3" />
+    <path d="M404 176l4.6 10.4 10.4 4.6-10.4 4.6-4.6 10.4-4.6-10.4-10.4-4.6 10.4-4.6z" fill="#ffe6ac" fill-opacity=".55" />
+    <path d="M108 246l3.4 7.6 7.6 3.4-7.6 3.4-3.4 7.6-3.4-7.6-7.6-3.4 7.6-3.4z" fill="#ffe6ac" fill-opacity=".42" />
+
+    <!-- 后层长发 -->
+    <path
+      d="M256 92c-78 0-140 60-140 148 0 62-4 122-18 176 26-4 48-18 62-38 10-14 16-32 18-50V256c0-46 30-78 78-78s78 32 78 78v72c2 18 8 36 18 50 14 20 36 34 62 38-14-54-18-114-18-176 0-88-62-148-140-148z"
+      fill="url(#hairBack)"
+    />
+
+    <!-- 肩与衣裙 -->
+    <path d="M256 366c-34 0-64 14-82 38l-20 30v82h204v-82l-20-30c-18-24-48-38-82-38z" fill="url(#dress)" />
+    <!-- 深色披肩 -->
+    <path d="M158 404c-22 14-34 42-38 108h-30v-74c0-24 14-38 40-42z" fill="#2b3450" />
+    <path d="M354 404c22 14 34 42 38 108h30v-74c0-24-14-38-40-42z" fill="#2b3450" />
+    <!-- 领口与金色滚边 -->
+    <path d="M256 368c-14 0-26 4-36 12l36 30 36-30c-10-8-22-12-36-12z" fill="#f7f2e4" />
+    <path d="M222 382l34 28 34-28" fill="none" stroke="#dcb264" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+
+    <!-- 脖子 -->
+    <path d="M232 318h48v52c0 10-11 16-24 16s-24-6-24-16z" fill="#ecccb0" />
+
+    <!-- 面部 -->
+    <path
+      d="M256 132c-46 0-82 38-82 92v18c0 54 37 96 82 96s82-42 82-96v-18c0-54-36-92-82-92z"
+      fill="url(#skin)"
+    />
+
+    <!-- 双侧长鬓 -->
+    <path d="M174 214c-13 40-16 92-12 138 3 30 10 52 20 66 12-20 16-46 14-74-3-40-6-92-22-130z" fill="url(#hair)" />
+    <path d="M338 214c13 40 16 92 12 138-3 30-10 52-20 66-12-20-16-46-14-74 3-40 6-92 22-130z" fill="url(#hair)" />
+
+    <!-- 刘海：整圈发帽覆盖颅顶，下缘做出两处分绺缺口 -->
+    <path
+      d="M256 112c-56 0-86 40-86 98 0 6 0 10 2 14 14-10 30-16 44-14 8 16 24 24 42 22 18 2 34-6 42-22 14-2 30 4 44 14 2-4 2-8 2-14 0-58-30-98-86-98z"
+      fill="url(#hair)"
+    />
+    <!-- 发丝高光（沿颅顶走一道弧，压住白发帽的平淡感） -->
+    <path d="M204 168c14-26 38-40 64-40" fill="none" stroke="#fff3cc" stroke-opacity=".5" stroke-width="7" stroke-linecap="round" />
+    <!-- 分绺线 -->
+    <path d="M256 120c-4 20-4 36 0 50M222 132c-8 16-12 30-12 44M290 132c8 16 12 30 12 44" fill="none" stroke="#c9963c" stroke-opacity=".32" stroke-width="3.6" stroke-linecap="round" />
+
+    <!-- 白花发饰（荧的标志物） -->
+    <g transform="translate(352 168)">
+      <g fill="#ffffff">
+        <ellipse cx="0" cy="-22" rx="12" ry="17" />
+        <ellipse cx="21" cy="-7" rx="12" ry="17" transform="rotate(72 21 -7)" />
+        <ellipse cx="13" cy="18" rx="12" ry="17" transform="rotate(144 13 18)" />
+        <ellipse cx="-13" cy="18" rx="12" ry="17" transform="rotate(216 -13 18)" />
+        <ellipse cx="-21" cy="-7" rx="12" ry="17" transform="rotate(288 -21 -7)" />
+      </g>
+      <circle cx="0" cy="0" r="9" fill="#cfe4f7" />
+      <circle cx="0" cy="0" r="4.4" fill="#e8b64c" />
+    </g>
+
+    <!-- 眉 -->
+    <path d="M204 238c10-6 22-6 32 0M276 238c10-6 22-6 32 0" fill="none" stroke="#c08d3a" stroke-width="5" stroke-linecap="round" stroke-opacity=".8" />
+
+    <!-- 眼睛：金色瞳 + 高光 -->
+    <g>
+      <path d="M198 268c8-9 20-13 32-10 8 2 14 8 16 14-8 8-20 12-32 9-8-2-14-7-16-13z" fill="#fffdf7" />
+      <circle cx="222" cy="270" r="11" fill="#e5ab3f" />
+      <circle cx="222" cy="270" r="5.2" fill="#8a5a1c" />
+      <circle cx="218" cy="266" r="3.4" fill="#fffdf7" />
+      <path d="M196 267c10-10 24-14 38-10" fill="none" stroke="#8a5f2a" stroke-width="4.6" stroke-linecap="round" />
+    </g>
+    <g>
+      <path d="M314 268c-8-9-20-13-32-10-8 2-14 8-16 14 8 8 20 12 32 9 8-2 14-7 16-13z" fill="#fffdf7" />
+      <circle cx="290" cy="270" r="11" fill="#e5ab3f" />
+      <circle cx="290" cy="270" r="5.2" fill="#8a5a1c" />
+      <circle cx="286" cy="266" r="3.4" fill="#fffdf7" />
+      <path d="M316 267c-10-10-24-14-38-10" fill="none" stroke="#8a5f2a" stroke-width="4.6" stroke-linecap="round" />
+    </g>
+
+    <!-- 腮红 -->
+    <ellipse cx="202" cy="292" rx="15" ry="9" fill="#f0a48f" fill-opacity=".38" />
+    <ellipse cx="310" cy="292" rx="15" ry="9" fill="#f0a48f" fill-opacity=".38" />
+
+    <!-- 鼻与唇 -->
+    <path d="M254 292c2 4 2 7 0 9" fill="none" stroke="#d9ab8c" stroke-width="4" stroke-linecap="round" />
+    <path d="M246 310c6 6 14 6 20 0" fill="none" stroke="#c9755f" stroke-width="4.6" stroke-linecap="round" />
+
+    <!-- 玻璃覆盖层 -->
+    <rect width="512" height="512" fill="url(#glassHi)" />
+    <rect width="512" height="512" fill="url(#glassShade)" />
+    <rect x="5" y="5" width="502" height="502" rx="112" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="4" />
+  </g>
+</svg>

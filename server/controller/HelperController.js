@@ -61,7 +61,7 @@ export default class HelperController extends ApiController {
           logger.mark('[Guoba] 服务停止失败')
           logger.error(err)
         } else {
-          logger.mark('[Guoba] 已停止当前服务，您如果想要多开锅巴，请更改不同的端口号~')
+          logger.mark('[YingPanel] 已停止当前服务，您如果想要多开荧后台，请更改不同的端口号~')
         }
       })
     }, 10)

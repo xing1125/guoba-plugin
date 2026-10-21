@@ -15,7 +15,7 @@ export class YingAiGroupService extends Service {
     this._data = createYingAiGroupData(path.resolve(_paths.pluginRoot, '..', 'YingAI'))
   }
 
-  meta() { return this._data.meta() }
+  meta(q) { return this._data.meta(q) }
   dashboard(q) { return this._data.dashboard(q) }
   turns(q) { return this._data.turns(q) }
   invalidate() { this._data.invalidate() }

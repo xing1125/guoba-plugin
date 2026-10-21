@@ -7,13 +7,14 @@ export class GuobaLogin extends plugin {
 
   constructor (e) {
     super({
-      name: '锅巴登录',
-      dsc: '锅巴快捷登录',
+      name: '荧后台登录',
+      dsc: '荧后台快捷登录',
       event: 'message',
       priority: 100,
       rule: [
         {
-          reg: '^#?锅巴(登录|登陆)$',
+          // 保留「锅巴」旧名做兼容：改名后主人手滑打旧指令也能登录
+          reg: '^#?(荧后台|锅巴)(登录|登陆)$',
           fnc: 'login'
         }
       ]
@@ -29,7 +30,7 @@ export class GuobaLogin extends plugin {
     } catch (e) {
       console.error(e)
       return this.reply(
-        '锅巴服务启动失败，可能是端口号占用，或者依赖没有安装完整，请发送“#锅巴帮助”获取相关帮助信息。'
+        '荧后台服务启动失败，可能是端口号占用，或者依赖没有安装完整，请发送“#荧后台帮助”获取相关帮助信息。'
       )
     }
 
@@ -76,7 +77,7 @@ export class GuobaLogin extends plugin {
         await this.reply('地址已发送至主人的私信了~')
       } catch (e) {
         logger.error(e)
-        await this.reply('消息发送失败~请加Bot的好友或者私聊发送#锅巴登录')
+        await this.reply('消息发送失败~请加Bot的好友或者私聊发送#荧后台登录')
       }
     } else {
       await this.reply(await makeForwardMsg(this.e, message))

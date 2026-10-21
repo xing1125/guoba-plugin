@@ -2,7 +2,7 @@ import path from 'path'
 import lodash from 'lodash'
 import { _paths, cfg } from '#guoba.platform'
 
-// 支持锅巴
+// 支持荧后台
 export function supportGuoba () {
   return {
     // 插件信息，将会显示在前端页面
@@ -12,9 +12,9 @@ export function supportGuoba () {
       // name 为插件唯一标识，尽量不要与其他插件重复
       name: 'guoba-plugin',
       // title 为显示名称
-      title: 'Guoba-Plugin',
+      title: 'YingPanel（荧后台）',
       // 插件描述
-      description: '主要提供后台管理界面',
+      description: '荧后台 ·  Yunzai-Bot 后台管理面板',
       // 作者可以为字符串也可以为数组，当有多个作者时建议使用数组
       author: [
         '@zolay-poi',
@@ -26,7 +26,7 @@ export function supportGuoba () {
         'https://github.com/guoba-yunzai'
       ],
       // 仓库地址
-      link: 'https://github.com/guoba-yunzai/guoba-plugin',
+      link: 'https://github.com/xing1125/guoba-plugin',
       isV3: true,
       isV2: false,
       // 是否显示在左侧菜单，可选值：auto、true、false
@@ -52,7 +52,7 @@ export function supportGuoba () {
         {
           field: 'base.loginInGroup',
           label: '允许群聊登录',
-          bottomHelpMessage: '允许在群聊里使用`#锅巴登录`，有一定风险，酌情开启',
+          bottomHelpMessage: '允许在群聊里使用`#荧后台登录`，有一定风险，酌情开启',
           // 【组件类型】，可参考
           // https://doc.vvbin.cn/components/introduction.html
           // https://3x.antdv.com/components/overview-cn/
@@ -61,7 +61,7 @@ export function supportGuoba () {
         {
           field: 'base.onlyCustomAddress',
           label: '仅发送自定义地址',
-          bottomHelpMessage: '`#锅巴登录`仅发送自定义地址,不发送内网外网地址',
+          bottomHelpMessage: '`#荧后台登录`仅发送自定义地址,不发送内网外网地址',
           component: 'Switch'
         },
         {
@@ -115,7 +115,7 @@ export function supportGuoba () {
         {
           field: 'server.host',
           label: '服务器地址',
-          bottomHelpMessage: 'auto 为自动获取本机IP地址，仅用于“#锅巴登录”和控制台中',
+          bottomHelpMessage: 'auto 为自动获取本机IP地址，仅用于“#荧后台登录”和控制台中',
           component: 'Input',
           required: true,
           componentProps: {
@@ -144,7 +144,7 @@ export function supportGuoba () {
         // {
         //   field: 'server.showAllIp',
         //   label: '显示所有IP',
-        //   bottomHelpMessage: '当host为auto时，是否在使用"#锅巴登录"时显示所有IP地址',
+        //   bottomHelpMessage: '当host为auto时，是否在使用"#荧后台登录"时显示所有IP地址',
         //   component: 'Switch',
         // },
         {

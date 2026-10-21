@@ -33,12 +33,14 @@ export default class YingAIGroupController extends ApiController {
       from: q.from ? String(q.from) : '',
       to: q.to ? String(q.to) : '',
       gid: q.gid ? String(q.gid) : '',
+      // 大屏「显示探针」调试开关：默认剔除 __probe_* 行，显式带上才放行
+      includeProbe: q.includeProbe === '1' || q.includeProbe === 'true',
     }
   }
 
-  async meta() {
+  async meta(req) {
     try {
-      return Result.ok(await this.yingAiGroupService.meta())
+      return Result.ok(await this.yingAiGroupService.meta(this._range(req)))
     } catch (e) {
       return Result.error(`读取 diag 元信息失败：${e?.message || e}`)
     }

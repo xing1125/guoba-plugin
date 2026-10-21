@@ -17,22 +17,23 @@ const _STATUS = {
 let isChecked = false
 
 /**
- * 锅巴更新
+ * 荧后台更新
  */
 export class GuobaUpdate extends plugin {
   constructor(e) {
     super({
-      name: '锅巴更新',
-      dsc: '锅巴更新、升级',
+      name: '荧后台更新',
+      dsc: '荧后台更新、升级',
       event: 'message',
       priority: 100,
       rule: [
         {
-          reg: '^#锅巴版本$',
+          // 「锅巴」旧名保留兼容
+          reg: '^#?(荧后台|锅巴)版本$',
           fnc: 'getVersion',
         },
         {
-          reg: '^#锅巴(强制)?(更新|升级|update)$',
+          reg: '^#?(荧后台|锅巴)(强制)?(更新|升级|update)$',
           fnc: 'doUpdate',
           permission: 'master',
         },
@@ -175,7 +176,7 @@ export class GuobaUpdate extends plugin {
     const checkVersion = await redis.get(checkUpdateRedisKey)
     // 一个版本只提醒一次
     if (remote.version !== checkVersion) {
-      tell && sendToMaster(`[Guoba] 发现新版本：${remote.version}，请发送“#锅巴更新”进行更新`)
+      tell && sendToMaster(`[YingPanel] 发现新版本：${remote.version}，请发送“#荧后台更新”进行更新`)
     }
     // 判断是否需要重启，不仅要判断当前远程版本，还要判断最近一次需要重启的远程版本是否大于本地版本
     for (let item of remotes) {

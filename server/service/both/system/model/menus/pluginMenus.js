@@ -8,7 +8,7 @@ const pluginsStoreMenu = {
   meta: {
     title: '插件管理',
     // icon: 'uil:store',
-    icon: 'gm:plugins-data',
+    icon: 'gmg:plugins-data',
   },
 }
 
@@ -18,7 +18,7 @@ const pluginsIndexMenu = {
   component: '/guoba/plugins/index',
   meta: {
     title: '插件列表',
-    icon: 'gm:plugin-list',
+    icon: 'gmg:plugin-list',
   },
 }
 
@@ -38,7 +38,7 @@ export async function usePluginsMenu() {
       component: `/guoba/plugins/plugin-detail/index`,
       meta: {
         title: value.pluginInfo?.title ?? name,
-        icon: value.pluginInfo?.icon ?? 'gm:plugins-data',
+        icon: value.pluginInfo?.icon ?? 'gmg:plugins-data',
         ignoreRoute: true,
       },
       guobaMeta: {
@@ -79,9 +79,9 @@ export async function usePluginsMenu() {
         component: '/guoba/plugins/index',
         meta: {
           title: '插件配置',
-          // icon: 'gm:plugins-data',
+          // icon: 'gmg:plugins-data',
           // icon: 'arcticons:game-plugins',
-          icon: 'gm:plugin-config',
+          icon: 'gmg:plugin-config',
         },
         // 重定向到
         redirect: pluginsIndexMenu.path,
@@ -102,7 +102,7 @@ const miaoMenu = {
   component: '/guoba/plugins/extra-config/miao-plugin/index',
   meta: {
     title: '喵喵帮助',
-    icon: 'gm:heart',
+    icon: 'gmg:heart',
   },
 }
 
@@ -145,7 +145,7 @@ async function useWavesPluginMenu() {
       name: 'WavesDashboard',
       meta: {
         title: '鸣潮签到看板',
-        icon: 'gm:plugin-chart',
+        icon: 'gmg:plugin-chart',
         frameSrc: '/waves-dashboard',
       },
     },

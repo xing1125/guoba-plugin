@@ -88,7 +88,7 @@ export default class PluginController extends ApiController {
     }
     const hostname = parsed.hostname.toLowerCase()
     if (!whitelist.some(domain => hostname === domain || hostname.endsWith('.' + domain))) {
-      return Result.error(`不允许从 ${hostname} 安装插件，请在锅巴设置中添加白名单`)
+      return Result.error(`不允许从 ${hostname} 安装插件，请在荧后台设置中添加白名单`)
     }
     let text = await this.pluginService.installPlugin(link, autoRestart, autoNpmInstall)
     this._audit(req, 'plugin.install', link)
@@ -116,7 +116,7 @@ export default class PluginController extends ApiController {
   getSupport(pluginName) {
     let supportObject = GuobaSupportMap.get(pluginName)
     if (!supportObject) {
-      throw '该插件不支持锅巴'
+      throw '该插件不支持荧后台'
     }
     return supportObject
   }

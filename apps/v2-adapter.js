@@ -7,7 +7,7 @@ import {v2Apps} from '../utils/adapter/loadV2.js'
 export class GuobaV2Adapter extends plugin {
   constructor(e) {
     super({
-      name: '锅巴:兼容V2',
+      name: '荧后台:兼容V2',
       dsc: '兼容V2的单JS插件',
       event: 'message',
       priority: 0,

@@ -6,19 +6,20 @@ export class GuobaHelp extends plugin {
 
   constructor(e) {
     super({
-      name: '锅巴帮助',
-      dsc: '锅巴插件帮助',
+      name: '荧后台帮助',
+      dsc: '荧后台帮助',
       event: 'message',
       priority: 100,
       rule: [
         {
-          reg: '^#?锅巴(帮助|菜单|说明|功能|指令|命令|使用说明|help)$',
+          // 「锅巴」旧名保留兼容
+          reg: '^#?(荧后台|锅巴)(帮助|菜单|说明|功能|指令|命令|使用说明|help)$',
           fnc: 'getHelp',
           permission: 'master',
         },
-        // 可通过`#锅巴重启`重载`guoba.support.js`
+        // 可通过`#荧后台重启`重载`guoba.support.js`
         {
-          reg: '^#锅巴重启$',
+          reg: '^#?(荧后台|锅巴)重启$',
           fnc: 'restart',
           permission: 'master',
         },
@@ -34,8 +35,8 @@ export class GuobaHelp extends plugin {
 
   async getHelp() {
     let msg = [
-      '锅巴帮助：\n' +
-      'https://gitee.com/guoba-yunzai/guoba-plugin/wikis/Home'
+      '荧后台帮助：\n' +
+      'https://github.com/xing1125/guoba-plugin'
     ]
 
     if(this.e?.platform) {
@@ -53,7 +54,7 @@ export class GuobaHelp extends plugin {
   async restart() {
     if (Guoba && Guoba.reload) {
       await Guoba.reload()
-      return this.e.reply('锅巴重启成功~')
+      return this.e.reply('荧后台重启成功~')
     } else {
       return this.e.reply('奇怪，服务似乎并没有启动……')
     }
