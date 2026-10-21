@@ -210,6 +210,17 @@ export const SystemMenus = {
       icon: 'gmg:bot',
     },
   },
+  // 荧之心智（YingAI 记忆/关系/情绪观测 · 云崽管理后台扩展）
+  yingMind: {
+    path: '/ying-mind',
+    name: 'YingMind',
+    component: '/guoba/system/yingmind/index',
+    meta: {
+      perm: 'ying-mind',
+      title: '荧之心智',
+      icon: 'gmg:heart',
+    },
+  },
   // 插件数据（云崽管理后台扩展）
   pluginsData: {
     path: '/plugins-data',

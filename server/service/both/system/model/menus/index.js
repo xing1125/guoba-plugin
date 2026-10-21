@@ -29,6 +29,7 @@ export async function useAllMenus() {
   menus.push(SystemMenus.rank)
   menus.push(SystemMenus.scheduler)
   menus.push(SystemMenus.yingai)
+  menus.push(SystemMenus.yingMind)
   menus.push(SystemMenus.chatDiag)
   menus.push(SystemMenus.dbHealth)
   menus.push(SystemMenus.pluginsData)

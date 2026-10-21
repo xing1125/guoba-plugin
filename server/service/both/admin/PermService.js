@@ -51,6 +51,7 @@ export const MENU_CATALOGUE = [
   {perm: 'rank', name: '群战力榜'},
   {perm: 'scheduler', name: '定时任务'},
   {perm: 'yingai', name: 'AI 私聊'},
+  {perm: 'ying-mind', name: '荧之心智'},
   {perm: 'plugins-data', name: '插件数据'},
   {perm: 'sign', name: '签到中心'},
   {perm: 'nav-mgr', name: '导航管理'},

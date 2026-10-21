@@ -1,3 +1,13 @@
+# 2.4.5
+
+新模块「荧之心智」：只读观测荧（YingAI）的记忆 / 关系 / 情绪。
+
+* 新增 `YingMindService`：读 YingAI 落盘数据（`data/memory`、`data/relationships`、`data/emotion`），零侵入只读，探针/测试文件（`__probe_`/`test_` 前缀）剔除，读失败静默跳过
+* 新增 `YingMindController`：`GET /admin/yingmind/groups|memories|relations|emotion`
+* 群名从运行时 `Bot.gl` 解析；记忆按 value 重要度排序，关系按 affinity 亲密度排序
+* 新增菜单「荧之心智」（`ying-mind`，图标 `gmg:heart`），权限目录同步
+* **需重启 Bot 生效**（Controller 启动时加载、菜单启动时下发）
+
 # 2.4.4
 
 实时对话增强：看到群里的完整聊天 + 群筛选按名称。
