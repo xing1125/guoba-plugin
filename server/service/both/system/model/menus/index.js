@@ -27,6 +27,7 @@ export async function useAllMenus() {
   menus.push(SystemMenus.groups)
   menus.push(SystemMenus.usersData)
   menus.push(SystemMenus.rank)
+  menus.push(SystemMenus.cmdStats)
   menus.push(SystemMenus.scheduler)
   menus.push(SystemMenus.yingai)
   menus.push(SystemMenus.yingMind)

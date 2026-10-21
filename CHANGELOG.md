@@ -1,3 +1,13 @@
+# 2.4.9
+
+新模块「指令统计」：解析 Yunzai 运行日志统计指令使用。
+
+* 新增 `CmdStatsService`：解析 logs/command.YYYY-MM-DD.log（明文+gz；zst 跳过），正则提取「群(gid), 昵称(wxid)][指令名][…(插件目录)」；定时任务行（无 ", " 分隔）排除；5 分钟缓存
+* 新增 `CmdStatsController`：`GET /admin/cmd-stats/list?days=3|7|14`
+* 新增菜单「指令统计」（`cmd-stats`，图标 `gmg:plugin-chart`）+ 权限目录
+* **需重启 Bot 生效**
+
+
 # 2.4.8
 
 荧之心智升级：记忆/情绪干预（写操作）。

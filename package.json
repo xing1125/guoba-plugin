@@ -1,6 +1,6 @@
 {
   "name": "guoba-plugin",
-  "version": "2.4.8",
+  "version": "2.4.9",
   "description": "YingPanel（荧后台）· Yunzai-Bot 后台管理面板。兼容Miao-Yunzai（V3、V4）、TRSS-Yunzai",
   "type": "module",
   "module": "index.js",
@@ -17,6 +17,7 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
+    "fzstd": "^0.1.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "2.1.1"
   },

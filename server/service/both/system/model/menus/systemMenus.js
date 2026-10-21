@@ -221,6 +221,17 @@ export const SystemMenus = {
       icon: 'gmg:pulse',
     },
   },
+  // 指令统计（运行日志解析 · 云崽管理后台扩展）
+  cmdStats: {
+    path: '/cmd-stats',
+    name: 'CmdStats',
+    component: '/guoba/system/cmdstats/index',
+    meta: {
+      perm: 'cmd-stats',
+      title: '指令统计',
+      icon: 'gmg:plugin-chart',
+    },
+  },
   // 告警中心（签到/插件/系统聚合 · 云崽管理后台扩展）
   alertCenter: {
     path: '/alert-center',
