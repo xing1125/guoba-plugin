@@ -41,7 +41,9 @@ export class YingMindService extends Service {
 
   _isProbeGid(gid) {
     const g = String(gid || '')
-    return !g || /^__probe_/.test(g) || /^test_/.test(g)
+    if (!g) return true
+    // 探针/测试：__probe_、probe_、test_ 前缀，以及 v10p5 这类版本探针
+    return /^__probe_/.test(g) || /^probe_/.test(g) || /^test_/.test(g) || /^v\d+p\d+/.test(g)
   }
 
   /** 目录里所有「真实群」的磁盘基名（文件去 .json，目录保留原名；剔除探针） */
