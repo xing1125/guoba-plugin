@@ -1,6 +1,7 @@
 import lodash from 'lodash'
 import fs from 'node:fs'
 import path from 'node:path'
+import YAML from 'yaml'
 import {YamlReader} from "#guoba.framework"
 import {isTRSS} from '#guoba.adapter'
 import {_paths} from '#guoba.platform'
@@ -162,6 +163,193 @@ export default class ConfigServiceImpl extends IConfigService {
     }
   }
 
+  /* ------------------------------ 版本 / 对比 / 导出导入 ------------------------------ */
+
+  /** 备份根目录：<bot>/data/guobaConfigBackup */
+  _backupRoot() {
+    return path.join(_paths.root, 'data', 'guobaConfigBackup')
+  }
+
+  /** key → 备份目录名，必须与 backupConfigFile 内保持一致 */
+  _safeKey(key) {
+    return String(key || 'unknown').replace(/[^\w.-]/g, '_')
+  }
+
+  /** 版本文件名白名单：<YYYYMMDD-HHmmss>_<文件名>，挡掉路径穿越 */
+  _checkVersionFile(file) {
+    const name = String(file ?? '')
+    if (!/^\d{8}-\d{6}_[\w.-]+$/.test(name) || name.includes('..') || /[\\/]/.test(name)) {
+      throw new Error('版本文件名不合法')
+    }
+    return name
+  }
+
+  /** '20261021-042840' → 本地时间毫秒，解析不了给 0 */
+  _stampToMs(stamp) {
+    const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(String(stamp ?? ''))
+    if (!m) return 0
+    const time = new Date(
+      Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+      Number(m[4]), Number(m[5]), Number(m[6]),
+    ).getTime()
+    return Number.isFinite(time) ? time : 0
+  }
+
+  /** 该配置当前在磁盘上的绝对路径 */
+  _currentPath(key) {
+    let reader
+    try {
+      reader = getConfigReader(key, configFile)
+    } catch {
+      throw new Error('找不到该配置的文件路径')
+    }
+    const p = reader?.yamlPath
+    if (!p) throw new Error('找不到该配置的文件路径')
+    return p
+  }
+
+  /** 版本列表（时间倒序，最新在前） */
+  listVersions(key) {
+    const dir = path.join(this._backupRoot(), this._safeKey(key))
+    let names = []
+    try {
+      names = fs.readdirSync(dir)
+    } catch {
+      // 目录不存在 = 还没有任何备份，不算错误
+    }
+    const versions = []
+    for (const file of names) {
+      if (!/^\d{8}-\d{6}_[\w.-]+$/.test(file) || file.includes('..') || /[\\/]/.test(file)) continue
+      let stat
+      try {
+        stat = fs.statSync(path.join(dir, file))
+      } catch {
+        continue
+      }
+      if (!stat.isFile()) continue
+      const stamp = file.slice(0, 15)
+      versions.push({
+        file,
+        stamp,
+        time: this._stampToMs(stamp),
+        size: stat.size,
+        target: file.slice(16),
+      })
+    }
+    versions.sort((a, b) => b.time - a.time || b.file.localeCompare(a.file))
+    return {
+      key,
+      currentFile: configFile[key] || '',
+      currentPath: this._currentPath(key),
+      versions,
+    }
+  }
+
+  /** 读某版本 yaml 原文（保留注释，不做解析） */
+  readVersion(key, file) {
+    const name = this._checkVersionFile(file)
+    const p = path.join(this._backupRoot(), this._safeKey(key), name)
+    if (!fs.existsSync(p)) throw new Error('版本文件不存在')
+    const stat = fs.statSync(p)
+    if (stat.size > 512 * 1024) throw new Error('配置文件过大，暂不支持在线查看')
+    const currentPath = this._currentPath(key)
+    return {
+      file: name,
+      stamp: name.slice(0, 15),
+      time: this._stampToMs(name.slice(0, 15)),
+      size: stat.size,
+      content: fs.readFileSync(p, 'utf8'),
+      currentContent: fs.existsSync(currentPath) ? fs.readFileSync(currentPath, 'utf8') : '',
+    }
+  }
+
+  /** 行级 LCS 对比：历史版本当旧、当前磁盘当新 */
+  diffVersion(key, file) {
+    const name = this._checkVersionFile(file)
+    const p = path.join(this._backupRoot(), this._safeKey(key), name)
+    if (!fs.existsSync(p)) throw new Error('版本文件不存在')
+    const stamp = name.slice(0, 15)
+    const oldLines = splitLines(fs.readFileSync(p, 'utf8'))
+    const currentPath = this._currentPath(key)
+    const newLines = splitLines(fs.existsSync(currentPath) ? fs.readFileSync(currentPath, 'utf8') : '')
+
+    /* 两文件总行数过大时 LCS 的 O(n*m) 吃不消，退化成集合计数 */
+    if (oldLines.length + newLines.length > 3000) {
+      const {added, removed, unchanged} = countDiff(oldLines, newLines)
+      globalThis.logger?.mark?.(`[Guoba] 配置对比降级（行数过多）：${key} ${name}`)
+      return {file: name, stamp, time: this._stampToMs(stamp), added, removed, unchanged, lines: [], truncated: true}
+    }
+    const {added, removed, unchanged, lines} = lcsDiff(oldLines, newLines)
+    return {file: name, stamp, time: this._stampToMs(stamp), added, removed, unchanged, lines}
+  }
+
+  /** 回滚到某历史版本（先把当前状态备份，回滚本身也能再回滚） */
+  async restoreVersion(key, file) {
+    const name = this._checkVersionFile(file)
+    const dir = path.join(this._backupRoot(), this._safeKey(key))
+    const src = path.join(dir, name)
+    if (!fs.existsSync(src)) throw new Error('版本文件不存在')
+    const reader = getConfigReader(key, configFile)
+    const before = new Set(fs.existsSync(dir) ? fs.readdirSync(dir) : [])
+    this.backupConfigFile(key, reader)
+    const after = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+    const added = after.filter((f) => !before.has(f)).sort()
+    const backupOf = added.length ? added[added.length - 1] : ''
+    fs.copyFileSync(src, reader.yamlPath)
+    /* 传解析后的数据而不是 null：applyHot 内部 checkHot 要靠字段判断 NO_HOT_FIELDS
+       （chromium_path / puppeteer_ws）。传 null 会让「改了这些字段却报 hot:true」，
+       前端就会误显示「已即时生效」而实际必须重启。 */
+    let parsed = null
+    try { parsed = YAML.parse(fs.readFileSync(src, 'utf8')) } catch { parsed = null }
+    const res = this.applyHot(key, parsed)
+    logger?.mark?.(`[Guoba] 配置已回滚：${key} ← ${name}（回滚前已备份 ${backupOf || '无'}）`)
+    return {hot: res.hot, reason: res.reason, restoredFrom: name, backupOf, key}
+  }
+
+  /** 导出当前配置原文（保留注释） */
+  exportConfig(key) {
+    const p = this._currentPath(key)
+    if (!fs.existsSync(p)) throw new Error('配置文件不存在')
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+    return {
+      key,
+      filename: `${String(key || 'config').replace(/\./g, '-')}_${stamp}.yaml`,
+      content: fs.readFileSync(p, 'utf8'),
+    }
+  }
+
+  /** 导入配置：校验全部通过才落盘 */
+  async importConfig(key, content) {
+    if (typeof content !== 'string') throw new Error('配置内容必须是字符串')
+    if (content.length > 262144) throw new Error('配置内容过大（上限 256KB）')
+    let parsed
+    try {
+      parsed = YAML.parse(content)
+    } catch (e) {
+      throw new Error(`YAML 解析失败：${e.message}`)
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('配置内容必须是一个 YAML 对象')
+    }
+
+    const reader = getConfigReader(key, configFile)
+    const dir = path.join(this._backupRoot(), this._safeKey(key))
+    const before = new Set(fs.existsSync(dir) ? fs.readdirSync(dir) : [])
+    this.backupConfigFile(key, reader)
+    const after = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+    const added = after.filter((f) => !before.has(f)).sort()
+    const backupOf = added.length ? added[added.length - 1] : ''
+    const bytes = Buffer.byteLength(content)
+    fs.writeFileSync(reader.yamlPath, content, 'utf8')
+    /* 同 restoreVersion：把真正写进去的解析结果交给 applyHot，
+       否则改到 NO_HOT_FIELDS 也会误报 hot:true */
+    const res = this.applyHot(key, parsed)
+    logger?.mark?.(`[Guoba] 配置已导入：${key}（${bytes} 字节，导入前已备份 ${backupOf || '无'}）`)
+    return {hot: res.hot, reason: res.reason, bytes, backupOf, key}
+  }
+
   needHandleConfigKey = [
     'system.other',
     'system.group',
@@ -226,4 +414,70 @@ export default class ConfigServiceImpl extends IConfigService {
     return handler(data)
   }
 
+}
+
+/* ------------------------------ 行级 diff 工具 ------------------------------ */
+
+/** 按行切分：去掉行尾 \r，空文件按 0 行处理 */
+function splitLines(text) {
+  const src = String(text ?? '').replace(/\r\n?/g, '\n')
+  if (!src) return []
+  const lines = src.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
+/**
+ * 标准行级 LCS diff（a 当旧、b 当新）
+ * 返回 lines 里 '-' 是旧有新无，'+' 是新有旧无，' ' 是两边都有
+ */
+function lcsDiff(a, b) {
+  const n = a.length
+  const m = b.length
+  const w = m + 1
+  /* dp[i][j] = a[i..] 与 b[j..] 的 LCS 长度，扁平化成一维 Int32Array 省内存 */
+  const dp = new Int32Array((n + 1) * w)
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * w + j] = a[i] === b[j]
+        ? dp[(i + 1) * w + (j + 1)] + 1
+        : Math.max(dp[(i + 1) * w + j], dp[i * w + (j + 1)])
+    }
+  }
+  const lines = []
+  let added = 0
+  let removed = 0
+  let unchanged = 0
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      lines.push({type: ' ', text: a[i]})
+      i++; j++; unchanged++
+    } else if (dp[(i + 1) * w + j] >= dp[i * w + (j + 1)]) {
+      lines.push({type: '-', text: a[i]})
+      i++; removed++
+    } else {
+      lines.push({type: '+', text: b[j]})
+      j++; added++
+    }
+  }
+  while (i < n) { lines.push({type: '-', text: a[i++]}); removed++ }
+  while (j < m) { lines.push({type: '+', text: b[j++]}); added++ }
+  return {added, removed, unchanged, lines}
+}
+
+/** 超大文件的降级计数：多重集合相交长度，不做位置对齐 */
+function countDiff(a, b) {
+  const pool = new Map()
+  for (const line of a) pool.set(line, (pool.get(line) || 0) + 1)
+  let common = 0
+  for (const line of b) {
+    const left = pool.get(line) || 0
+    if (left > 0) {
+      pool.set(line, left - 1)
+      common++
+    }
+  }
+  return {added: b.length - common, removed: a.length - common, unchanged: common}
 }
