@@ -1,3 +1,14 @@
+# 2.4.2
+
+控制台「实时对话」：在后台看到荧在群里的实时回复，并支持以 Bot 身份代发。
+
+* 新增 `YingAILiveService`：**零侵入**复用 YingAI 自己的诊断文件（`data/diag/YYYY-MM-DD.jsonl`），每 2 秒增量读今日+昨日文件尾部，按 `ts` 去重进内存环形缓冲（上限 2000 条）
+* 不监听 YingAI 内部事件（那套框架庞杂易碎），只读它落盘的权威诊断数据，口径与诊断大屏 / 自检一致（探针行同规则剔除）
+* 新增 `YingAILiveController`：`GET /admin/yingai-live/stream`（增量拉取，`after` 游标）、`GET /admin/yingai-live/groups`（有实时流的群，按活跃排序）、`POST /admin/yingai-live/reply`（以 Bot 身份代发，复用 `ConsoleService.send`）
+* 代发成功后立刻把「我发的」注入实时流，前端能马上看到自己的消息和荧的后续回复同屏
+* 服务在 `appMounted` 启动（`yingAILiveService.start()`）
+* **主动撤回不可用**：协议端（ComWeChat / GSUIDCore / Milky）只实现 `send_message`/`upload_file`，无 `delete_msg`/`recall_msg` 动作，故控制台只提供「已发送列表 + 撤回标灰说明」，不糊弄
+
 # 2.4.1
 
 角色面板（喵喵面板图）改造：接入 miao 官方角色表，改成「筛选 + 角色网格 + 选中角色图片区」的信息架构。

@@ -138,4 +138,10 @@ function appMounted(guobaApp) {
   } catch (e) {
     logger?.warn?.(`[Guoba] 签到健康度巡检启动失败：${e.message}`)
   }
+  // 荧实时对话流：2 秒增量读诊断文件，供控制台「实时对话」看
+  try {
+    instancesMap?.get('yingAiLiveService')?.start?.()
+  } catch (e) {
+    logger?.warn?.(`[Guoba] 荧实时对话流启动失败：${e.message}`)
+  }
 }
