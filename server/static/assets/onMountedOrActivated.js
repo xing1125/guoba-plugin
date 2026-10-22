@@ -1,1 +1,1 @@
-import{ao as onMounted,n as nextTick,d0 as onActivated}from"./index.js";function onMountedOrActivated(hook){let mounted;onMounted((()=>{hook(),nextTick((()=>{mounted=!0}))})),onActivated((()=>{mounted&&hook()}))}export{onMountedOrActivated as o};
+import{ao as onMounted,n as nextTick,d1 as onActivated}from"./index.js";function onMountedOrActivated(hook){let mounted;onMounted((()=>{hook(),nextTick((()=>{mounted=!0}))})),onActivated((()=>{mounted&&hook()}))}export{onMountedOrActivated as o};
