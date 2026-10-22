@@ -43,6 +43,7 @@ export class CmdStatsService extends Service {
     const groups = new Map() // gid -> {name, count}
     const users = new Map() // wxid -> {nick, count}
     const plugins = new Map() // 插件目录 -> 次数
+    const daily = [] // 每天一条，用于趋势图（dayList 是倒序，最后再反转成正序）
     let total = 0
     let skippedDays = []
     let parsedDays = []
@@ -51,6 +52,8 @@ export class CmdStatsService extends Service {
       const raw = this._readDay(day)
       if (raw === null) {
         skippedDays.push(day)
+        // 日志缺失的那天也占一个 0 位，趋势图不会把两天连成一条直线
+        daily.push({date: day, total: 0, cmds: 0, groups: 0, users: 0})
         continue
       }
       // 一次性清洗：剥离 ANSI 颜色转义码与 CRLF 的 \r。
@@ -58,10 +61,18 @@ export class CmdStatsService extends Service {
       // 中间的 ESC 序列会让行首锚定正则整行失配，必须先整体清掉再逐行解析。
       const text = this._clean(raw)
       parsedDays.push(day)
+      const dayCmds = new Set()
+      const dayGroups = new Set()
+      const dayUsers = new Set()
+      let dayTotal = 0
       for (const line of text.split('\n')) {
         const r = this._parseLine(line)
         if (!r) continue
         total++
+        dayTotal++
+        dayCmds.add(r.cmd)
+        dayGroups.add(r.gid)
+        dayUsers.add(r.uid)
         cmds.set(r.cmd, (cmds.get(r.cmd) || 0) + 1)
         const g = groups.get(r.gid) || {gid: r.gid, name: r.gname, count: 0}
         g.count++
@@ -73,6 +84,13 @@ export class CmdStatsService extends Service {
         users.set(r.uid, u)
         if (r.plugin) plugins.set(r.plugin, (plugins.get(r.plugin) || 0) + 1)
       }
+      daily.push({
+        date: day,
+        total: dayTotal,
+        cmds: dayCmds.size,
+        groups: dayGroups.size,
+        users: dayUsers.size,
+      })
     }
 
     const result = {
@@ -80,6 +98,8 @@ export class CmdStatsService extends Service {
       parsedDays,
       skippedDays,
       total,
+      /* 趋势用：按日期正序（旧 → 新），缺失的日志日也保留一条 total=0 让折线不断档 */
+      daily: [...daily].reverse(),
       cmds: this._top(cmds).map(([name, count]) => ({name, count})),
       groups: [...groups.values()].sort((a, b) => b.count - a.count).slice(0, 15),
       users: [...users.values()].sort((a, b) => b.count - a.count).slice(0, 15),
