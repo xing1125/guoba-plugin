@@ -292,11 +292,16 @@ export class LogService extends Service {
         if (cur) {
           out.push(cur)
         }
+        // m[3] 是 `][LEVEL]` 之后的全部内容：可能有多个 [ctx] 段，其后才是正文。
+        // 只取开头的括号组作为 ctx，否则前端 ctx 列会把正文再显示一遍。
+        const rest = m[3] || ''
+        const ctxMatch = rest.match(/^(?:\[[^\]]*\])+/)
         cur = {
           time: m[1],
           level: normLevel(m[2]),
           levelRaw: m[2].toUpperCase(),
-          ctx: (m[3] || '').trim(),
+          ctx: ctxMatch ? ctxMatch[0].trim() : '',
+          body: rest.slice(ctxMatch ? ctxMatch[0].length : 0).trim(),
           raw: line,
           detail: [],
         }
@@ -315,7 +320,10 @@ export class LogService extends Service {
     for (const e of out) {
       e.file = name
       e.archive = !!gz
-      e.msg = e.raw.replace(/^\[[^\]]*\]\[[^\]]*\](?:\[[^\]]*\])*/, '').trim()
+      // 有解析结果就用 body（正文，保留 `[Snapshot]` 这类开头标签）；
+      // 纯续行兜底条目没有 body，退回整行
+      e.msg = e.body !== undefined ? e.body : e.raw.trim()
+      delete e.body
     }
     if (windowed) {
       // 窗口内第一条可能是半条，丢掉
