@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
 import { createRequire } from 'node:module'
-const require = createRequire('D:/yunzai-yingbot/Yunzai/app/plugins/Guoba-Plugin/package.json')
+const require = createRequire('D:/trss-yunzai/plugins/Guoba-Plugin/package.json')
 const { createClient } = require('redis')
-const GUOBA = 'D:/yunzai-yingbot/Yunzai/app/plugins/Guoba-Plugin'
-const APP = 'D:/yunzai-yingbot/Yunzai/app'
+const GUOBA = 'D:/trss-yunzai/plugins/Guoba-Plugin'
+const APP = 'D:/trss-yunzai'
 
 const client = createClient({ socket: { host: '127.0.0.1', port: 6379 }, database: 0 })
 await client.connect()

@@ -15,9 +15,9 @@ import vm from 'node:vm'
 import {createRequire} from 'node:module'
 import {execFileSync} from 'node:child_process'
 
-const require = createRequire('D:/yunzai-yingbot/Yunzai/app/package.json')
-const GUOBA = 'D:/yunzai-yingbot/Yunzai/app/plugins/Guoba-Plugin'
-const APP = 'D:/yunzai-yingbot/Yunzai/app'
+const require = createRequire('D:/trss-yunzai/package.json')
+const GUOBA = 'D:/trss-yunzai/plugins/Guoba-Plugin'
+const APP = 'D:/trss-yunzai'
 const SVC = path.join(GUOBA, 'server/service/v3/config/ConfigServiceImpl.js')
 const CTRL = path.join(GUOBA, 'server/controller/biz/ConfigController.js')
 const TMP_DIR = path.join(APP, 'data/__cfgver_test')

@@ -10,9 +10,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
 
-const GUOBA = 'D:/yunzai-yingbot/Yunzai/app/plugins/Guoba-Plugin'
+const GUOBA = 'D:/trss-yunzai/plugins/Guoba-Plugin'
 const SVC = path.join(GUOBA, 'server/service/both/admin/YingMindService.js')
-const MEM = 'D:/yunzai-yingbot/Yunzai/app/plugins/YingAI/data/memory'
+const MEM = 'D:/trss-yunzai/plugins/YingAI/data/memory'
 const DATA = path.dirname(MEM)
 const TMP_GID = '__tmp_cleanup_test'
 

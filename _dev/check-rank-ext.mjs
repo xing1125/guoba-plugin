@@ -11,7 +11,7 @@ import path from 'node:path'
 import vm from 'node:vm'
 import {createClient} from 'redis'
 
-const GUOBA = 'D:/yunzai-yingbot/Yunzai/app/plugins/Guoba-Plugin'
+const GUOBA = 'D:/trss-yunzai/plugins/Guoba-Plugin'
 const SVC = path.join(GUOBA, 'server/service/both/admin/RankService.js')
 const RANK_KEY_RE = /^miao:rank:(.+):(dmg|mark|crit|valid):(\d+)$/
 const normGid = (gid) => String(gid ?? '').replace(/^group-/, '').trim()
