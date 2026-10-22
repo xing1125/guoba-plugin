@@ -32,7 +32,7 @@ export const OP_CATALOGUE = [
     {op: 'config:delete', name: '删除配置卡'},
   ]},
   {group: '系统与权限', items: [
-    {op: 'system:write', name: '系统操作（重启锅巴、建目录）'},
+    {op: 'system:write', name: '系统操作（重启荧后台、建目录）'},
     {op: 'sys:write', name: '后台用户 / 角色管理'},
     {op: 'audit:read', name: '查看全量审计日志'},
   ]},

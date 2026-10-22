@@ -41,9 +41,9 @@ export class SystemController extends ApiController {
     this._audit(req, 'system.restart', 'guoba')
     if (Guoba && Guoba.reload) {
       await Promise.any([Guoba.reload(), sleep(500)])
-      return Result.ok({}, '锅巴重启成功~')
+      return Result.ok({}, '荧后台重启成功~')
     } else {
-      return Result.error({}, '锅巴服务异常，请手动重启！')
+      return Result.error({}, '荧后台服务异常，请手动重启！')
     }
   }
 
