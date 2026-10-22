@@ -144,4 +144,10 @@ function appMounted(guobaApp) {
   } catch (e) {
     logger?.warn?.(`[Guoba] 荧实时对话流启动失败：${e.message}`)
   }
+  // 每日快照：情绪 / 战力时序，供曲线使用
+  try {
+    instancesMap?.get('snapshotService')?.start?.()
+  } catch (e) {
+    logger?.warn?.(`[Guoba] 每日快照采集启动失败：${e.message}`)
+  }
 }
