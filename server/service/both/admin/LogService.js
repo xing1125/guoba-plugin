@@ -25,12 +25,25 @@ import {_paths} from '#guoba.platform'
 
 /** 读窗口上限：每次只从尾部读这么多字节 */
 const MAX_WINDOW = 1.5 * 1024 * 1024
+/** 控制台文件（stdout）读窗口：要能看到整个启动过程，给更大窗口 */
+const CONSOLE_WINDOW = 4 * 1024 * 1024
 /** 单条 entry 保留的续行上限（堆栈够看就行，防止内存膨胀） */
 const MAX_DETAIL_LINES = 60
 /** 下载上限 */
 const MAX_DOWNLOAD = 8 * 1024 * 1024
 /** 允许的文件名：logs 目录下的 .log / .log.gz */
 const FILE_RE = /^[^\\/:*?"<>|]+\.log(\.gz)?$/i
+
+/**
+ * 控制台虚拟文件：映射到 Yunzai 根目录的进程 stdout/stderr 重定向。
+ * bot_stdout.log 由启动脚本（start-yunzai.cmd）以覆盖方式写入，
+ * 内容覆盖「进程启动 → 插件加载 → 适配器连接微信」全过程，
+ * 是唯一能看到完整启动序列的日志源（log4js 文件里没有适配器层输出）。
+ */
+const CONSOLE_FILES = {
+  'bot_stdout.log': { label: '实时控制台', kind: 'console', pin: 3, desc: '启动 → 微信连接 全过程' },
+  'bot_stderr.log': { label: '控制台错误流', kind: 'console', pin: 2, desc: 'stderr 异常与崩溃输出' },
+}
 
 const LEVEL_ALIAS = {
   ERRO: 'ERROR',
@@ -79,28 +92,58 @@ export class LogService extends Service {
   listFiles() {
     const dir = this.logDir
     const today = this._today()
-    if (!fs.existsSync(dir)) {
-      return {dir, files: [], totalSize: 0, today, available: false}
-    }
-    const names = fs.readdirSync(dir).filter((n) => FILE_RE.test(n))
     const files = []
-    for (const name of names) {
-      const abs = path.join(dir, name)
-      let st
+
+    // 控制台文件（Yunzai 根目录的 stdout/stderr 重定向）置顶
+    for (const [name, meta] of Object.entries(CONSOLE_FILES)) {
+      const abs = path.join(this.appRoot, name)
       try {
-        st = fs.statSync(abs)
+        const st = fs.statSync(abs)
+        if (!st.isFile()) {
+          continue
+        }
+        files.push({
+          file: name,
+          kind: meta.kind,
+          console: true,
+          gz: false,
+          pinned: true,
+          pin: meta.pin,
+          date: '',
+          label: meta.label,
+          desc: meta.desc,
+          size: st.size,
+          mtime: new Date(st.mtimeMs).toISOString(),
+          today: true,
+        })
       } catch {
-        continue
+        /* 文件不存在（还没用脚本启动过）就跳过 */
       }
-      if (!st.isFile()) {
-        continue
-      }
-      files.push(this._describe(name, st))
     }
-    // 排序：error.log 置顶 → 今天的 command → 其余按日期倒序
+
+    if (fs.existsSync(dir)) {
+      const names = fs.readdirSync(dir).filter((n) => FILE_RE.test(n))
+      for (const name of names) {
+        const abs = path.join(dir, name)
+        let st
+        try {
+          st = fs.statSync(abs)
+        } catch {
+          continue
+        }
+        if (!st.isFile()) {
+          continue
+        }
+        files.push(this._describe(name, st))
+      }
+    }
+
+    // 排序：实时控制台 → error.log → 今天的 command → 其余按日期倒序
     files.sort((a, b) => {
-      if (a.pinned !== b.pinned) {
-        return a.pinned ? -1 : 1
+      const pa = a.pin || 0
+      const pb = b.pin || 0
+      if (pa !== pb) {
+        return pb - pa
       }
       if (a.date !== b.date) {
         return String(b.date).localeCompare(String(a.date))
@@ -119,8 +162,10 @@ export class LogService extends Service {
     return {
       file: name,
       kind,
+      console: false,
       gz,
       pinned: kind === 'error',
+      pin: kind === 'error' ? 1 : 0,
       date: m ? m[1] : '',
       label: kind === 'error' ? '错误日志' : kind === 'command' ? `运行流水 ${m ? m[1] : ''}`.trim() : name,
       size: st.size,
@@ -140,7 +185,13 @@ export class LogService extends Service {
     if (!FILE_RE.test(name)) {
       throw new Error('非法的日志文件名')
     }
-    const abs = path.join(this.logDir, name)
+    let abs
+    if (CONSOLE_FILES[name]) {
+      // 控制台虚拟文件：位于 Yunzai 根目录（进程 stdout 重定向）
+      abs = path.join(this.appRoot, name)
+    } else {
+      abs = path.join(this.logDir, name)
+    }
     if (!fs.existsSync(abs)) {
       throw new Error(`日志文件不存在：${name}`)
     }
@@ -163,8 +214,10 @@ export class LogService extends Service {
     const level = String(opts.level || '').toUpperCase()
     const q = String(opts.q || '').trim()
     const gz = /\.gz$/i.test(name)
+    const isConsole = !!CONSOLE_FILES[name]
+    const maxWindow = isConsole ? CONSOLE_WINDOW : MAX_WINDOW
 
-    const {prefix, text} = this._slice(abs, st, gz)
+    const {prefix, text} = this._slice(abs, st, gz, maxWindow)
     const entries = this._parse(text, {name, gz, truncated: prefix > 0, cut: prefix})
 
     let list = entries
@@ -182,13 +235,14 @@ export class LogService extends Service {
     return {
       file: name,
       gz,
+      console: isConsole,
       size: st.size,
       mtime: new Date(st.mtimeMs).toISOString(),
       total: entries.length,
       matched,
       /** 是否因为窗口限制只看到了文件尾部 */
       windowed: prefix > 0,
-      windowBytes: Math.min(st.size, MAX_WINDOW),
+      windowBytes: Math.min(st.size, maxWindow),
       limit,
       counts: this._countByLevel(entries),
       entries: tail,
@@ -196,14 +250,14 @@ export class LogService extends Service {
   }
 
   /** 从尾部取窗口，返回 {prefix, text} */
-  _slice(abs, st, gz) {
+  _slice(abs, st, gz, maxWindow = MAX_WINDOW) {
     if (gz) {
       // 归档文件通常很小，整体解压
       const buf = fs.readFileSync(abs)
       const text = zlib.gunzipSync(buf).toString('utf8')
       return {prefix: 0, text}
     }
-    const start = Math.max(0, st.size - MAX_WINDOW)
+    const start = Math.max(0, st.size - maxWindow)
     const len = st.size - start
     if (len <= 0) {
       return {prefix: 0, text: ''}
@@ -342,6 +396,9 @@ export class LogService extends Service {
   /** 清空日志（唯一写操作） */
   clear(file, ctx = {}) {
     const {abs, st, name} = this._resolve(file)
+    if (CONSOLE_FILES[name]) {
+      throw new Error('控制台文件由 Bot 进程持有句柄，不支持在后台清空')
+    }
     if (/\.gz$/i.test(name)) {
       throw new Error('归档日志（.gz）不支持清空，请直接删除文件')
     }
